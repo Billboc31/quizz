@@ -1,3 +1,21 @@
+// Configuration Supabase
+const SUPABASE_URL='https://wnbnwybkhpapjnkllutr.supabase.co'
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InduYm53eWJraHBhcGpua2xsdXRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI4NDI5NTksImV4cCI6MjA2ODQxODk1OX0.G3UaSg6s4Ihlgk1vlTZScqOwUV4qME3lDurUL6okIe4'
+
+console.log('🚀 Script chargé - Configuration Supabase:', {
+    url: SUPABASE_URL,
+    keyLength: SUPABASE_ANON_KEY.length
+});
+
+// Test immédiat pour vérifier que le script fonctionne
+console.log('🧪 Test script - Date:', new Date().toISOString());
+console.log('🧪 Test script - User Agent:', navigator.userAgent);
+console.log('🧪 Test script - URL:', window.location.href);
+
+// Initialisation Supabase (sera configuré plus tard)
+let supabase = null;
+let messagesChannel = null;
+
 // État global de l'application
 let currentUser = null;
 let sessionId = null;
@@ -8,11 +26,15 @@ let gameState = 'waiting'; // waiting, question, blocked, answer, finished
 let participants = new Map();
 let userAnswers = new Map();
 let scores = new Map();
-// Timer supprimé - géré par le présentateur
-
-// Gestion de session
 let tabId = null;
 
+// Configuration par défaut
+const DEFAULT_CONFIG = {
+    admins: ['bocquet.pierre@gmail.com'], // Ajoutez vos emails admin ici
+    quiz: { questionTimer: 30 }
+};
+
+// Gestion de session
 function generateTabId() {
     if (!tabId) {
         tabId = 'tab_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
@@ -100,134 +122,566 @@ function clearSession() {
     console.log('🗑️ Session effacée pour cet onglet');
 }
 
-// Fonction utilitaire pour debug - accessible depuis la console
-window.debugSession = function() {
-    const session = sessionStorage.getItem('quizSession');
-    if (session) {
-        const data = JSON.parse(session);
-        console.log('📊 Informations de session:', {
-            tabId: data.tabId,
-            utilisateur: data.currentUser,
-            admin: data.isAdmin,
-            etatJeu: data.gameState,
-            questionActuelle: data.currentQuestionIndex + 1,
-            participants: data.participants.length,
-            age: Math.round((Date.now() - data.timestamp) / 1000) + 's'
-        });
-    } else {
-        console.log('❌ Aucune session active dans cet onglet');
-    }
-};
-
 function restoreUserGameState() {
+    // Restaurer l'état du jeu côté utilisateur
     switch (gameState) {
+        case 'waiting':
+            resetUserGame();
+            break;
         case 'question':
             if (questions[currentQuestionIndex]) {
-                showQuestion(
-                    questions[currentQuestionIndex], 
-                    currentQuestionIndex + 1, 
-                    questions.length
-                );
+                showQuestion(questions[currentQuestionIndex], currentQuestionIndex);
             }
             break;
-                 case 'blocked':
-             if (questions[currentQuestionIndex]) {
-                 showQuestion(
-                     questions[currentQuestionIndex], 
-                     currentQuestionIndex + 1, 
-                     questions.length
-                 );
-                 disableAnswerButtons();
-                 // Utiliser les données de session pour l'animation
-                 showBlockAnimationForUser(
-                     Array.from(participants.entries()),
-                     Array.from(userAnswers.entries()),
-                     questions[currentQuestionIndex]
-                 );
-             }
-             break;
+        case 'blocked':
+            if (questions[currentQuestionIndex]) {
+                showQuestion(questions[currentQuestionIndex], currentQuestionIndex);
+                blockUserAnswers();
+            }
+            break;
         case 'answer':
             if (questions[currentQuestionIndex]) {
-                showQuestion(
-                    questions[currentQuestionIndex], 
-                    currentQuestionIndex + 1, 
-                    questions.length
-                );
-                const currentQuestion = questions[currentQuestionIndex];
-                showAnswerFeedback(currentQuestion.correctAnswer, currentQuestion.options[currentQuestion.correctAnswer]);
-                updateUserScore(Array.from(scores.entries()));
+                showQuestion(questions[currentQuestionIndex], currentQuestionIndex);
+                showCorrectAnswer(questions[currentQuestionIndex], Array.from(scores.entries()));
             }
             break;
         case 'finished':
-            displayLeaderboard(generateLeaderboard());
+            const finalScores = Array.from(scores.entries())
+                .map(([email, score]) => ({ email, score }))
+                .sort((a, b) => b.score - a.score);
+            showFinalLeaderboard(finalScores);
             break;
-        default:
-            // État waiting ou autre
-            document.getElementById('waiting-message').style.display = 'block';
-            document.getElementById('question-container').style.display = 'none';
-            document.getElementById('leaderboard-container').style.display = 'none';
     }
 }
 
-// Gestion WebSocket réelle uniquement
-let socket = null;
-let reconnectAttempts = 0;
-const maxReconnectAttempts = 5;
+// Fonctions utilitaires pour la validation des réponses
+function levenshteinDistance(str1, str2) {
+    const matrix = [];
+    
+    // Normaliser les chaînes (minuscules, sans accents)
+    const normalize = (str) => str.toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+    
+    const a = normalize(str1);
+    const b = normalize(str2);
+    
+    // Créer la matrice
+    for (let i = 0; i <= b.length; i++) {
+        matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= a.length; j++) {
+        matrix[0][j] = j;
+    }
+    
+    // Remplir la matrice
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1, // substitution
+                    matrix[i][j - 1] + 1,     // insertion
+                    matrix[i - 1][j] + 1      // deletion
+                );
+            }
+        }
+    }
+    
+    return matrix[b.length][a.length];
+}
 
-function initializeWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+function isTextSimilar(userAnswer, correctAnswer, threshold = 0.8) {
+    if (!userAnswer || !correctAnswer) return false;
     
-    console.log('🔗 Connexion WebSocket à:', wsUrl);
+    // Normaliser les réponses
+    const normalizeText = (text) => text.toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
     
-    socket = new WebSocket(wsUrl);
+    const normalizedUser = normalizeText(userAnswer);
+    const normalizedCorrect = normalizeText(correctAnswer);
     
-    socket.onopen = () => {
-        console.log('✅ WebSocket connecté');
-        reconnectAttempts = 0;
-        socket.onmessage = handleWebSocketMessage;
+    // Vérification exacte d'abord
+    if (normalizedUser === normalizedCorrect) {
+        return true;
+    }
+    
+    // Vérification si l'une contient l'autre
+    if (normalizedUser.includes(normalizedCorrect) || normalizedCorrect.includes(normalizedUser)) {
+        return true;
+    }
+    
+    // Calcul de la distance de Levenshtein
+    const distance = levenshteinDistance(normalizedUser, normalizedCorrect);
+    const maxLength = Math.max(normalizedUser.length, normalizedCorrect.length);
+    
+    if (maxLength === 0) return true;
+    
+    const similarity = 1 - (distance / maxLength);
+    
+    return similarity >= threshold;
+}
+
+function validateAnswer(question, userAnswer) {
+    switch (question.type) {
+        case 'multiple_choice':
+            return userAnswer === question.correct_answer;
         
-        // Si on a une session active, notifier la reconnexion
-        if (currentUser) {
-            broadcastMessage({
-                type: 'participant-reconnected',
-                email: currentUser,
-                isAdmin: isAdmin
-            });
+        case 'true_false':
+            return userAnswer === question.correct_answer;
+        
+        case 'free_text':
+            if (Array.isArray(question.correct_answers)) {
+                return question.correct_answers.some(answer => 
+                    isTextSimilar(userAnswer, answer, question.threshold || 0.8)
+                );
+            }
+            return isTextSimilar(userAnswer, question.correct_answer, question.threshold || 0.8);
+        
+        default:
+            // Questions sans type (anciennes questions) - traiter comme choix multiple
+            if (question.options && typeof userAnswer === 'number') {
+                return userAnswer === question.correct_answer;
+            }
+            return false;
+    }
+}
+
+function isAdminUser(email) {
+    return DEFAULT_CONFIG.admins.includes(email);
+}
+
+function generateSessionId() {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
+// Gestion Supabase avec Realtime et fallback
+let pollingInterval = null;
+let lastMessageId = 0;
+
+async function initializeSupabase() {
+    try {
+        // Importer Supabase dynamiquement
+        const { createClient } = await import('https://cdn.skypack.dev/@supabase/supabase-js');
+        
+        // Créer le client Supabase
+        supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        // Essayer d'abord Supabase Realtime avec un canal unique
+        try {
+            const channelName = `quiz-room-${Date.now()}`;
+            console.log('🔗 Création du canal Realtime:', channelName);
+            
+            messagesChannel = supabase
+                .channel(channelName, {
+                    config: {
+                        broadcast: { self: true }
+                    }
+                })
+                .on('broadcast', { event: 'game-message' }, (payload) => {
+                    console.log('📨 Message Realtime reçu brut:', payload);
+                    handleRealtimeMessage(payload.payload);
+                })
+                .subscribe((status) => {
+                    console.log('📡 Statut canal Realtime:', status);
+                    if (status === 'SUBSCRIBED') {
+                        console.log('✅ Canal Realtime connecté et prêt');
+                        // Test de connexion
+                        setTimeout(() => {
+                            testRealtimeConnection();
+                        }, 1000);
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.error('❌ Erreur canal Realtime, activation du fallback');
+                        startPollingFallback();
+                    } else if (status === 'TIMED_OUT') {
+                        console.error('⏰ Timeout canal Realtime, activation du fallback');
+                        startPollingFallback();
+                    } else if (status === 'CLOSED') {
+                        console.warn('🔒 Canal Realtime fermé, activation du fallback');
+                        startPollingFallback();
+                    }
+                });
+            
+            // Timeout de sécurité pour activer le fallback si Realtime ne fonctionne pas
+            setTimeout(() => {
+                if (!messagesChannel || messagesChannel.state !== 'joined') {
+                    console.warn('⚠️ Realtime non disponible, activation du fallback');
+                    startPollingFallback();
+                }
+            }, 5000);
+            
+        } catch (realtimeError) {
+            console.error('❌ Erreur Realtime:', realtimeError);
+            startPollingFallback();
         }
-    };
-    
-    socket.onclose = (event) => {
-        console.log('❌ WebSocket fermé:', event.code, event.reason);
         
-        // Tentative de reconnexion
-        if (reconnectAttempts < maxReconnectAttempts) {
-            reconnectAttempts++;
-            console.log(`🔄 Reconnexion ${reconnectAttempts}/${maxReconnectAttempts}...`);
-            setTimeout(initializeWebSocket, 2000);
+        console.log('✅ Supabase initialisé');
+        return true;
+    } catch (error) {
+        console.error('❌ Erreur lors de l\'initialisation de Supabase:', error);
+        console.log('⚠️ Fonctionnement en mode local uniquement');
+        return false;
+    }
+}
+
+function testRealtimeConnection() {
+    console.log('🧪 Test de connexion Realtime...');
+    
+    if (messagesChannel) {
+        const testMessage = {
+            type: 'test-connection',
+            email: currentUser || 'test-user',
+            timestamp: new Date().toISOString()
+        };
+        
+        messagesChannel.send({
+            type: 'broadcast',
+            event: 'game-message',
+            payload: testMessage
+        }).then((response) => {
+            console.log('🧪 Réponse test Realtime:', response);
+            if (response === 'ok') {
+                console.log('✅ Test Realtime réussi');
+            } else {
+                console.error('❌ Test Realtime échoué:', response);
+            }
+        }).catch((error) => {
+            console.error('❌ Erreur test Realtime:', error);
+        });
+    }
+}
+
+function startPollingFallback() {
+    if (pollingInterval) return; // Éviter les doublons
+    
+    console.log('🔄 Démarrage du polling fallback');
+    
+    pollingInterval = setInterval(async () => {
+        try {
+            const { data, error } = await supabase
+                .from('messages')
+                .select('*')
+                .gt('id', lastMessageId)
+                .order('id', { ascending: true })
+                .limit(10);
+            
+            if (error) {
+                console.error('❌ Erreur polling:', error);
+                return;
+            }
+            
+            if (data && data.length > 0) {
+                data.forEach(message => {
+                    if (message.id > lastMessageId) {
+                        lastMessageId = message.id;
+                        console.log('📨 Message polling reçu:', message.type);
+                        handleRealtimeMessage(message);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('❌ Erreur polling fallback:', error);
+        }
+    }, 1000); // Polling toutes les secondes
+    
+    // Nettoyer les anciens messages toutes les 5 minutes
+    setInterval(async () => {
+        try {
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+            await supabase
+                .from('messages')
+                .delete()
+                .lt('timestamp', fiveMinutesAgo);
+            console.log('🧹 Anciens messages nettoyés');
+        } catch (error) {
+            console.error('❌ Erreur nettoyage messages:', error);
+        }
+    }, 5 * 60 * 1000);
+}
+
+function handleRealtimeMessage(data) {
+    console.log('📨 Message Realtime reçu:', data.type, 'de', data.email || 'unknown');
+    
+    // Ignorer ses propres messages
+    if (data.email === currentUser) {
+        return;
+    }
+    
+    handleGameMessage(data);
+}
+
+function handleGameMessage(data) {
+    console.log('📨 Message de jeu reçu:', data.type, 'de', data.email || 'unknown');
+    
+    switch (data.type) {
+        case 'test-connection':
+            console.log('🧪 Message de test reçu - Realtime fonctionne !');
+            return;
+        case 'participant-joined':
+            if (data.email !== currentUser) {
+                participants.set(data.email, {
+                    email: data.email,
+                    score: 0,
+                    answered: false,
+                    joinedAt: new Date().toISOString()
+                });
+                updateParticipantsCount();
+                if (isAdmin) {
+                    updateResponsesDisplay();
+                }
+            }
+            break;
+            
+        case 'participant-left':
+            participants.delete(data.email);
+            updateParticipantsCount();
+            if (isAdmin) {
+                updateResponsesDisplay();
+            }
+            break;
+            
+        case 'game-started':
+            if (!isAdmin) {
+                gameState = 'question';
+                currentQuestionIndex = 0;
+                showQuestion(data.question, data.questionIndex);
+            }
+            break;
+            
+        case 'next-question':
+            if (!isAdmin) {
+                gameState = 'question';
+                currentQuestionIndex = data.questionIndex;
+                showQuestion(data.question, data.questionIndex);
+            }
+            break;
+            
+        case 'answers-blocked':
+            if (!isAdmin) {
+                gameState = 'blocked';
+                blockUserAnswers();
+            }
+            break;
+            
+        case 'show-answer':
+            if (!isAdmin) {
+                gameState = 'answer';
+                showCorrectAnswer(data.question, data.scores);
+            }
+            break;
+            
+        case 'show-leaderboard':
+            if (!isAdmin) {
+                gameState = 'finished';
+                showFinalLeaderboard(data.scores);
+            }
+            break;
+            
+        case 'game-reset':
+            if (!isAdmin) {
+                resetUserGame();
+            }
+            break;
+            
+        case 'user-answer':
+            if (isAdmin && data.email !== currentUser) {
+                handleUserAnswer(data.email, data.answer, data.questionId);
+            }
+            break;
+    }
+}
+
+async function broadcastMessage(message) {
+    try {
+        console.log('📤 Envoi message:', message.type, 'Canal state:', messagesChannel?.state);
+        
+        if (supabase) {
+            const payload = {
+                ...message,
+                timestamp: new Date().toISOString()
+            };
+            
+            // Priorité à Realtime si disponible
+            if (messagesChannel && messagesChannel.state === 'joined') {
+                try {
+                    const response = await messagesChannel.send({
+                        type: 'broadcast',
+                        event: 'game-message',
+                        payload: payload
+                    });
+                    
+                    console.log('📤 Réponse Realtime:', response);
+                    
+                    if (response === 'ok') {
+                        console.log('✅ Message Realtime envoyé:', message.type);
+                        return; // Succès Realtime, pas besoin de fallback
+                    }
+                } catch (realtimeError) {
+                    console.error('❌ Erreur Realtime:', realtimeError);
+                }
+            }
+            
+            // Fallback : sauvegarder dans la table
+            console.log('📤 Utilisation du fallback pour:', message.type);
+            try {
+                const { error } = await supabase
+                    .from('messages')
+                    .insert([payload]);
+                
+                if (error) {
+                    console.error('❌ Erreur sauvegarde message:', error);
+                } else {
+                    console.log('✅ Message sauvegardé (fallback):', message.type);
+                }
+            } catch (dbError) {
+                console.error('❌ Erreur base de données:', dbError);
+            }
         } else {
-            console.error('❌ Impossible de se reconnecter après', maxReconnectAttempts, 'tentatives');
+            // Mode local
+            console.log('📤 Mode local:', message.type);
+            handleGameMessage(message);
         }
-    };
+    } catch (error) {
+        console.error('❌ Erreur lors de l\'envoi du message:', error);
+    }
+}
+
+// Gestion des données avec Supabase
+async function saveUser(userData) {
+    if (!supabase) return;
     
-    socket.onerror = (error) => {
-        console.error('❌ Erreur WebSocket:', error);
-    };
+    try {
+        const { error } = await supabase
+            .from('users')
+            .upsert([userData], { onConflict: 'email' });
+        
+        if (error) {
+            console.error('❌ Erreur lors de la sauvegarde utilisateur:', error);
+        }
+    } catch (error) {
+        console.error('❌ Erreur lors de la sauvegarde utilisateur:', error);
+    }
+}
+
+async function saveSessionData(sessionData) {
+    if (!supabase) return;
+    
+    try {
+        const { error } = await supabase
+            .from('sessions')
+            .upsert([sessionData], { onConflict: 'id' });
+        
+        if (error) {
+            console.error('❌ Erreur lors de la sauvegarde session:', error);
+        }
+    } catch (error) {
+        console.error('❌ Erreur lors de la sauvegarde session:', error);
+    }
+}
+
+async function loadQuestions() {
+    if (!supabase) {
+        // Mode local - utiliser les données existantes
+        return questions;
+    }
+    
+    try {
+        const { data, error } = await supabase
+            .from('questions')
+            .select('*')
+            .order('order', { ascending: true });
+        
+        if (error) {
+            console.error('❌ Erreur lors du chargement des questions:', error);
+            return [];
+        }
+        
+        return data || [];
+    } catch (error) {
+        console.error('❌ Erreur lors du chargement des questions:', error);
+        return [];
+    }
+}
+
+async function saveQuestion(questionData) {
+    if (!supabase) return null;
+    
+    try {
+        const { data, error } = await supabase
+            .from('questions')
+            .insert([questionData])
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('❌ Erreur lors de la sauvegarde question:', error);
+            return null;
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('❌ Erreur lors de la sauvegarde question:', error);
+        return null;
+    }
+}
+
+async function deleteQuestion(questionId) {
+    if (!supabase) return false;
+    
+    try {
+        const { error } = await supabase
+            .from('questions')
+            .delete()
+            .eq('id', questionId);
+        
+        if (error) {
+            console.error('❌ Erreur lors de la suppression question:', error);
+            return false;
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Erreur lors de la suppression question:', error);
+        return false;
+    }
 }
 
 // Initialisation de l'application
+console.log('📄 DOM en cours de chargement...');
+
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 DOM chargé - Initialisation de l\'application...');
     initializeApp();
 });
 
-function initializeApp() {
+// Fallback au cas où DOMContentLoaded ne se déclenche pas
+if (document.readyState === 'loading') {
+    console.log('📄 Document en cours de chargement, attente de DOMContentLoaded...');
+} else {
+    console.log('📄 Document déjà chargé, initialisation immédiate...');
+    initializeApp();
+}
+
+async function initializeApp() {
     console.log('🚀 Initialisation de l\'application - Onglet:', generateTabId());
     
-    // Vérifier s'il y a une session sauvegardée
-    restoreSession();
-    
-    // Initialiser la connexion WebSocket
-    initializeWebSocket();
+    try {
+        // Vérifier s'il y a une session sauvegardée
+        console.log('🔄 Restauration de session...');
+        restoreSession();
+        
+        // Initialiser Supabase avec Realtime
+        console.log('🔄 Initialisation Supabase...');
+        const supabaseSuccess = await initializeSupabase();
+        console.log('✅ Supabase initialisé:', supabaseSuccess);
+    } catch (error) {
+        console.error('❌ Erreur lors de l\'initialisation:', error);
+    }
     
     // Gestion de la vérification admin en temps réel
     document.getElementById('email').addEventListener('input', checkAdminAccess);
@@ -258,8 +712,6 @@ function initializeApp() {
     document.getElementById('show-leaderboard-btn').addEventListener('click', showLeaderboard);
     document.getElementById('reset-game-btn').addEventListener('click', resetGame);
     
-    // Le gestionnaire de messages est maintenant configuré dans initializeWebSocket
-    
     // Charger les données sauvegardées
     loadSavedData();
 }
@@ -276,30 +728,41 @@ async function handleLogin(e) {
         return;
     }
     
+    // Vérifier si l'utilisateur demande l'accès admin
+    if (adminMode && !isAdminUser(email)) {
+        alert('Accès administrateur non autorisé pour cet utilisateur');
+        return;
+    }
+    
     try {
-        // Appel API pour la connexion
-        const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                email: email,
-                requestAdmin: adminMode
-            })
-        });
+        // Créer les données utilisateur
+        const userData = {
+            email: email,
+            first_login: new Date().toISOString(),
+            last_login: new Date().toISOString(),
+            login_count: 1,
+            is_admin: isAdminUser(email)
+        };
         
-        const data = await response.json();
+        // Sauvegarder l'utilisateur
+        await saveUser(userData);
         
-        if (!response.ok) {
-            alert(`Erreur de connexion: ${data.error}`);
-            return;
-        }
+        // Générer une session
+        const newSessionId = generateSessionId();
+        const sessionData = {
+            id: newSessionId,
+            email: email,
+            is_admin: adminMode && isAdminUser(email),
+            created_at: new Date().toISOString(),
+            last_activity: new Date().toISOString()
+        };
+        
+        await saveSessionData(sessionData);
         
         // Connexion réussie
         currentUser = email;
-        sessionId = data.sessionId;
-        isAdmin = data.isAdmin;
+        sessionId = newSessionId;
+        isAdmin = adminMode && isAdminUser(email);
         
         // Ajouter le participant
         if (!isAdmin) {
@@ -320,7 +783,7 @@ async function handleLogin(e) {
         saveSession();
         
         // Notifier les autres participants
-        broadcastMessage({
+        await broadcastMessage({
             type: 'participant-joined',
             email: email,
             isAdmin: isAdmin
@@ -339,27 +802,10 @@ async function handleLogout() {
         participants.delete(currentUser);
         scores.delete(currentUser);
         
-        broadcastMessage({
+        await broadcastMessage({
             type: 'participant-left',
             email: currentUser
         });
-    }
-    
-    // Appel API pour la déconnexion
-    if (sessionId) {
-        try {
-            await fetch('/api/logout', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    sessionId: sessionId
-                })
-            });
-        } catch (error) {
-            console.error('❌ Erreur lors de la déconnexion:', error);
-        }
     }
     
     currentUser = null;
@@ -399,7 +845,25 @@ function switchTab(e) {
     document.getElementById(targetTab + '-tab').classList.add('active');
 }
 
-// Gestion des types de questions
+// Vérification admin
+function checkAdminAccess() {
+    const email = document.getElementById('email').value;
+    const adminCheckbox = document.getElementById('admin-mode');
+    
+    if (!email) {
+        adminCheckbox.disabled = true;
+        return;
+    }
+    
+    const isUserAdmin = isAdminUser(email);
+    adminCheckbox.disabled = !isUserAdmin;
+    
+    if (!isUserAdmin) {
+        adminCheckbox.checked = false;
+    }
+}
+
+// Gestion des questions
 function handleQuestionTypeChange() {
     const questionType = document.getElementById('question-type').value;
     const multipleChoiceOptions = document.getElementById('multiple-choice-options');
@@ -407,13 +871,13 @@ function handleQuestionTypeChange() {
     const trueFalseOptions = document.getElementById('true-false-options');
     const freeTextOptions = document.getElementById('free-text-options');
     
-    // Masquer tous les conteneurs
+    // Masquer toutes les options
     multipleChoiceOptions.style.display = 'none';
     correctAnswerSelect.style.display = 'none';
     trueFalseOptions.style.display = 'none';
     freeTextOptions.style.display = 'none';
     
-    // Afficher le conteneur approprié
+    // Afficher les options appropriées
     switch (questionType) {
         case 'multiple_choice':
             multipleChoiceOptions.style.display = 'block';
@@ -434,1129 +898,363 @@ function updateThresholdDisplay() {
     thresholdValue.textContent = Math.round(threshold * 100) + '%';
 }
 
-// Gestion des questions
 async function addQuestion() {
     const questionText = document.getElementById('question-text').value;
     const questionType = document.getElementById('question-type').value;
     
-    if (!questionText) {
-        alert('Veuillez saisir une question');
+    if (!questionText.trim()) {
+        alert('Veuillez entrer une question');
         return;
     }
     
-    let question = {
+    let questionData = {
         text: questionText,
-        type: questionType
+        type: questionType,
+        created_by: currentUser,
+        created_at: new Date().toISOString()
     };
     
-    // Validation et construction selon le type
+    // Traitement selon le type de question
     switch (questionType) {
         case 'multiple_choice':
-            const options = Array.from(document.querySelectorAll('.option-input')).map(input => input.value);
-            const correctAnswer = parseInt(document.getElementById('correct-answer').value);
+            const options = Array.from(document.querySelectorAll('.option-input'))
+                .map(input => input.value.trim())
+                .filter(option => option);
             
-            if (options.some(option => !option)) {
-                alert('Veuillez remplir toutes les options');
+            if (options.length < 2) {
+                alert('Veuillez entrer au moins 2 options');
                 return;
             }
             
-            question.options = options;
-            question.correctAnswer = correctAnswer;
+            questionData.options = options;
+            questionData.correct_answer = parseInt(document.getElementById('correct-answer').value);
             break;
             
         case 'true_false':
-            const trueFalseAnswer = parseInt(document.getElementById('true-false-answer').value);
-            question.options = ['Vrai', 'Faux'];
-            question.correctAnswer = trueFalseAnswer;
+            questionData.options = ['Vrai', 'Faux'];
+            questionData.correct_answer = parseInt(document.getElementById('true-false-answer').value);
             break;
             
         case 'free_text':
-            const freeTextAnswers = document.getElementById('free-text-answers').value;
-            const threshold = parseFloat(document.getElementById('similarity-threshold').value);
+            const answersText = document.getElementById('free-text-answers').value;
+            const answers = answersText.split('\n')
+                .map(answer => answer.trim())
+                .filter(answer => answer);
             
-            if (!freeTextAnswers.trim()) {
-                alert('Veuillez saisir au moins une réponse acceptée');
+            if (answers.length === 0) {
+                alert('Veuillez entrer au moins une réponse acceptée');
                 return;
             }
             
-            question.correctAnswers = freeTextAnswers.split('\n').map(answer => answer.trim()).filter(answer => answer);
-            question.threshold = threshold;
+            questionData.correct_answers = answers;
+            questionData.threshold = parseFloat(document.getElementById('similarity-threshold').value);
             break;
     }
     
+    // Déterminer l'ordre
+    const maxOrder = questions.reduce((max, q) => Math.max(max, q.order || 0), 0);
+    questionData.order = maxOrder + 1;
+    
     try {
-        // Appel API pour ajouter la question
-        const response = await fetch('/api/questions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                sessionId: sessionId,
-                question: question
-            })
-        });
+        const savedQuestion = await saveQuestion(questionData);
         
-        const data = await response.json();
-        
-        if (!response.ok) {
-            alert(`Erreur: ${data.error}`);
-            return;
+        if (savedQuestion) {
+            // Réinitialiser le formulaire
+            document.getElementById('question-text').value = '';
+            document.querySelectorAll('.option-input').forEach(input => input.value = '');
+            document.getElementById('free-text-answers').value = '';
+            
+            // Recharger les questions
+            await loadQuestionsFromServer();
+            
+            alert('Question ajoutée avec succès !');
+        } else {
+            alert('Erreur lors de l\'ajout de la question');
         }
-        
-        // Ajouter la question à la liste locale
-        questions.push(data.question);
-        updateQuestionsDisplay();
-        clearQuestionForm();
-        saveSession(); // Sauvegarder les questions
-        
-        console.log('✅ Question ajoutée:', data.question);
-        
     } catch (error) {
         console.error('❌ Erreur lors de l\'ajout de la question:', error);
         alert('Erreur lors de l\'ajout de la question. Veuillez réessayer.');
     }
 }
 
-function clearQuestionForm() {
-    document.getElementById('question-text').value = '';
-    document.querySelectorAll('.option-input').forEach(input => input.value = '');
-    document.getElementById('correct-answer').value = '0';
-    document.getElementById('true-false-answer').value = '0';
-    document.getElementById('free-text-answers').value = '';
-    document.getElementById('similarity-threshold').value = '0.8';
-    document.getElementById('threshold-value').textContent = '80%';
-    document.getElementById('question-type').value = 'multiple_choice';
-    handleQuestionTypeChange();
+async function loadQuestionsFromServer() {
+    try {
+        const loadedQuestions = await loadQuestions();
+        questions = loadedQuestions;
+        updateQuestionsDisplay();
+    } catch (error) {
+        console.error('❌ Erreur lors du chargement des questions:', error);
+    }
 }
 
 function updateQuestionsDisplay() {
     const container = document.getElementById('questions-container');
     container.innerHTML = '';
     
-    // Trier les questions par ordre
-    const sortedQuestions = [...questions].sort((a, b) => (a.order || 0) - (b.order || 0));
+    if (questions.length === 0) {
+        container.innerHTML = '<p>Aucune question créée</p>';
+        return;
+    }
     
-    sortedQuestions.forEach((question, index) => {
+    questions.forEach((question, index) => {
         const questionElement = document.createElement('div');
         questionElement.className = 'question-item';
-        questionElement.dataset.questionId = question.id;
-        
-        // Badge de type
-        const typeText = getQuestionTypeText(question.type);
-        const typeBadge = `<span class="question-type-badge ${question.type}">${typeText}</span>`;
-        
-        // Contenu selon le type
-        let optionsHtml = '';
-        if (question.type === 'multiple_choice' || question.type === 'true_false') {
-            optionsHtml = `
-                <div class="question-options">
-                    ${question.options.map((option, i) => `
-                        <div class="option ${i === question.correctAnswer ? 'correct' : ''}">${option}</div>
-                    `).join('')}
-                </div>
-            `;
-        } else if (question.type === 'free_text') {
-            optionsHtml = `
-                <div class="question-options">
-                    <div class="free-text-answers">
-                        <strong>Réponses acceptées :</strong>
-                        ${question.correctAnswers.map(answer => `<span class="correct-answer">${answer}</span>`).join(', ')}
-                    </div>
-                    <div class="threshold-info">
-                        <strong>Seuil de similarité :</strong> ${Math.round((question.threshold || 0.8) * 100)}%
-                    </div>
-                </div>
-            `;
-        }
-        
         questionElement.innerHTML = `
-            <div class="drag-handle">📋 Glisser pour réorganiser</div>
-            ${typeBadge}
-            <h4>Question ${question.order || index + 1}: ${question.text}</h4>
-            ${optionsHtml}
-            <button class="delete-question" onclick="deleteQuestion(${question.id})">Supprimer</button>
+            <div class="question-header">
+                <span class="question-number">${index + 1}</span>
+                <span class="question-type">${getQuestionTypeLabel(question.type)}</span>
+                <button class="delete-btn" onclick="deleteQuestionHandler(${question.id})">🗑️</button>
+            </div>
+            <div class="question-content">
+                <p><strong>${question.text}</strong></p>
+                ${getQuestionPreview(question)}
+            </div>
         `;
         container.appendChild(questionElement);
     });
 }
 
-function getQuestionTypeText(type) {
+function getQuestionTypeLabel(type) {
     switch (type) {
         case 'multiple_choice': return 'Choix multiple';
         case 'true_false': return 'Vrai/Faux';
         case 'free_text': return 'Texte libre';
-        default: return 'Inconnu';
+        default: return 'Choix multiple';
     }
 }
 
-async function deleteQuestion(questionId) {
+function getQuestionPreview(question) {
+    switch (question.type) {
+        case 'multiple_choice':
+            return `
+                <div class="options-preview">
+                    ${question.options.map((option, index) => 
+                        `<span class="option ${index === question.correct_answer ? 'correct' : ''}">${option}</span>`
+                    ).join('')}
+                </div>
+            `;
+        case 'true_false':
+            return `
+                <div class="options-preview">
+                    <span class="option ${question.correct_answer === 0 ? 'correct' : ''}">Vrai</span>
+                    <span class="option ${question.correct_answer === 1 ? 'correct' : ''}">Faux</span>
+                </div>
+            `;
+        case 'free_text':
+            return `
+                <div class="free-text-preview">
+                    <p><strong>Réponses acceptées:</strong> ${question.correct_answers.join(', ')}</p>
+                    <p><strong>Seuil:</strong> ${Math.round(question.threshold * 100)}%</p>
+                </div>
+            `;
+        default:
+            return '';
+    }
+}
+
+async function deleteQuestionHandler(questionId) {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette question ?')) {
+        return;
+    }
+    
     try {
-        // Appel API pour supprimer la question
-        const response = await fetch(`/api/questions/${questionId}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                sessionId: sessionId
-            })
-        });
+        const success = await deleteQuestion(questionId);
         
-        const data = await response.json();
-        
-        if (!response.ok) {
-            alert(`Erreur: ${data.error}`);
-            return;
-        }
-        
-        // Supprimer de la liste locale
-        questions = questions.filter(q => q.id !== questionId);
-        updateQuestionsDisplay();
-        saveSession(); // Sauvegarder les questions
-        
-        console.log('✅ Question supprimée:', questionId);
-        
-    } catch (error) {
-        console.error('❌ Erreur lors de la suppression de la question:', error);
-        alert('Erreur lors de la suppression de la question. Veuillez réessayer.');
-    }
-}
-
-// Gestion de l'ordonnancement des questions
-let sortMode = false;
-
-function toggleSortMode() {
-    const container = document.getElementById('questions-container');
-    const sortBtn = document.getElementById('sort-questions-btn');
-    
-    sortMode = !sortMode;
-    
-    if (sortMode) {
-        container.classList.add('sortable');
-        sortBtn.textContent = '✅ Terminer';
-        sortBtn.style.background = 'var(--success-color)';
-        
-        // Activer le drag and drop
-        enableDragAndDrop();
-        
-        // Ajouter les classes sortable aux questions
-        document.querySelectorAll('.question-item').forEach(item => {
-            item.classList.add('sortable');
-        });
-        
-    } else {
-        container.classList.remove('sortable');
-        sortBtn.textContent = '📋 Réorganiser';
-        sortBtn.style.background = 'var(--warning-color)';
-        
-        // Désactiver le drag and drop
-        disableDragAndDrop();
-        
-        // Retirer les classes sortable
-        document.querySelectorAll('.question-item').forEach(item => {
-            item.classList.remove('sortable');
-        });
-        
-        // Sauvegarder le nouvel ordre
-        saveQuestionsOrder();
-    }
-}
-
-function enableDragAndDrop() {
-    const container = document.getElementById('questions-container');
-    
-    container.addEventListener('dragstart', handleDragStart);
-    container.addEventListener('dragover', handleDragOver);
-    container.addEventListener('drop', handleDrop);
-    container.addEventListener('dragend', handleDragEnd);
-    
-    // Rendre les éléments draggables
-    document.querySelectorAll('.question-item').forEach(item => {
-        item.draggable = true;
-    });
-}
-
-function disableDragAndDrop() {
-    const container = document.getElementById('questions-container');
-    
-    container.removeEventListener('dragstart', handleDragStart);
-    container.removeEventListener('dragover', handleDragOver);
-    container.removeEventListener('drop', handleDrop);
-    container.removeEventListener('dragend', handleDragEnd);
-    
-    // Retirer draggable
-    document.querySelectorAll('.question-item').forEach(item => {
-        item.draggable = false;
-    });
-}
-
-let draggedElement = null;
-
-function handleDragStart(e) {
-    if (e.target.classList.contains('question-item')) {
-        draggedElement = e.target;
-        e.target.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-    }
-}
-
-function handleDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    
-    const afterElement = getDragAfterElement(e.clientY);
-    const container = document.getElementById('questions-container');
-    
-    if (afterElement == null) {
-        container.appendChild(draggedElement);
-    } else {
-        container.insertBefore(draggedElement, afterElement);
-    }
-}
-
-function handleDrop(e) {
-    e.preventDefault();
-}
-
-function handleDragEnd(e) {
-    if (e.target.classList.contains('question-item')) {
-        e.target.classList.remove('dragging');
-    }
-    draggedElement = null;
-}
-
-function getDragAfterElement(y) {
-    const container = document.getElementById('questions-container');
-    const draggableElements = [...container.querySelectorAll('.question-item:not(.dragging)')];
-    
-    return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        
-        if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
+        if (success) {
+            await loadQuestionsFromServer();
+            alert('Question supprimée avec succès !');
         } else {
-            return closest;
+            alert('Erreur lors de la suppression');
         }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-}
-
-async function saveQuestionsOrder() {
-    const container = document.getElementById('questions-container');
-    const questionItems = container.querySelectorAll('.question-item');
-    
-    const questionOrders = [];
-    questionItems.forEach((item, index) => {
-        const questionId = parseInt(item.dataset.questionId);
-        questionOrders.push({
-            id: questionId,
-            order: index + 1
-        });
-    });
-    
-    try {
-        const response = await fetch('/api/questions/reorder', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                sessionId: sessionId,
-                questionOrders: questionOrders
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            alert(`Erreur: ${data.error}`);
-            return;
-        }
-        
-        // Mettre à jour l'ordre local
-        questionOrders.forEach(({ id, order }) => {
-            const question = questions.find(q => q.id === id);
-            if (question) {
-                question.order = order;
-            }
-        });
-        
-        // Rafraîchir l'affichage
-        updateQuestionsDisplay();
-        saveSession();
-        
-        console.log('✅ Ordre des questions sauvegardé');
-        
     } catch (error) {
-        console.error('❌ Erreur lors de la sauvegarde de l\'ordre:', error);
-        alert('Erreur lors de la sauvegarde de l\'ordre des questions.');
+        console.error('❌ Erreur lors de la suppression:', error);
+        alert('Erreur lors de la suppression. Veuillez réessayer.');
     }
 }
 
 // Gestion du jeu
 function startGame() {
     if (questions.length === 0) {
-        alert('Veuillez ajouter au moins une question avant de commencer');
+        alert('Aucune question disponible. Veuillez d\'abord créer des questions.');
         return;
     }
     
     gameState = 'question';
     currentQuestionIndex = 0;
-    userAnswers.clear();
     
-    // Reset des scores
+    // Réinitialiser les réponses et scores
+    userAnswers.clear();
     participants.forEach((participant, email) => {
+        participant.answered = false;
         scores.set(email, 0);
-        participant.score = 0;
     });
+    
+    const currentQuestion = questions[currentQuestionIndex];
     
     broadcastMessage({
         type: 'game-started',
-        email: currentUser,
-        question: questions[currentQuestionIndex],
-        questionNumber: currentQuestionIndex + 1,
-        totalQuestions: questions.length
+        question: currentQuestion,
+        questionIndex: currentQuestionIndex
     });
     
     updateGameControls();
-    updateResponsesDisplay(); // Afficher l'état initial
-    saveSession(); // Sauvegarder l'état
+    updateResponsesDisplay();
+    
+    console.log('🚀 Jeu démarré avec', questions.length, 'questions');
 }
 
 function nextQuestion() {
-    if (currentQuestionIndex < questions.length - 1) {
-        currentQuestionIndex++;
-        gameState = 'question';
-        userAnswers.clear();
-        
-        broadcastMessage({
-            type: 'next-question',
-            email: currentUser,
-            question: questions[currentQuestionIndex],
-            questionNumber: currentQuestionIndex + 1,
-            totalQuestions: questions.length
-        });
-        
-        updateGameControls();
-        updateResponsesDisplay(); // Afficher l'état initial
-        saveSession(); // Sauvegarder l'état
-    } else {
-        // Fin du jeu
-        gameState = 'finished';
-        broadcastMessage({
-            type: 'game-finished',
-            email: currentUser,
-            leaderboard: generateLeaderboard()
-        });
-        updateGameControls();
-        saveSession(); // Sauvegarder l'état
+    if (currentQuestionIndex >= questions.length - 1) {
+        alert('Plus de questions disponibles');
+        return;
     }
+    
+    currentQuestionIndex++;
+    gameState = 'question';
+    userAnswers.clear();
+    
+    // Réinitialiser les statuts des participants
+    participants.forEach((participant, email) => {
+        participant.answered = false;
+    });
+    
+    const currentQuestion = questions[currentQuestionIndex];
+    
+    broadcastMessage({
+        type: 'next-question',
+        question: currentQuestion,
+        questionIndex: currentQuestionIndex
+    });
+    
+    updateGameControls();
+    updateResponsesDisplay();
 }
 
 function blockAnswers() {
     gameState = 'blocked';
     
-    // L'animation ne s'affiche que côté utilisateur via WebSocket
     broadcastMessage({
-        type: 'answers-blocked',
-        email: currentUser,
-        participants: Array.from(participants.entries()),
-        userAnswers: Array.from(userAnswers.entries()),
-        currentQuestion: questions[currentQuestionIndex]
+        type: 'answers-blocked'
     });
     
     updateGameControls();
-    updateResponsesDisplay(); // Afficher les réponses détaillées pour l'admin
-    saveSession(); // Sauvegarder l'état
+    showBlockAnswersAnimation();
 }
 
-async function showAnswer() {
-    const currentQuestion = questions[currentQuestionIndex];
+function showAnswer() {
     gameState = 'answer';
     
-    // Calculer les scores selon le type de question
-    const scoreUpdates = new Map();
-    
-    for (const [email, answer] of userAnswers.entries()) {
-        let isCorrect = false;
-        
-        if (currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'true_false' || !currentQuestion.type) {
-            isCorrect = answer === currentQuestion.correctAnswer;
-        } else if (currentQuestion.type === 'free_text') {
-            // Valider via l'API serveur
-            try {
-                const response = await fetch('/api/validate-answer', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        questionId: currentQuestion.id,
-                        userAnswer: answer
-                    })
-                });
-                
-                const data = await response.json();
-                isCorrect = data.isCorrect;
-            } catch (error) {
-                console.error('❌ Erreur validation réponse:', error);
-                isCorrect = false;
-            }
-        }
-        
-        if (isCorrect) {
-            const currentScore = scores.get(email) || 0;
-            const newScore = currentScore + 1;
-            scores.set(email, newScore);
-            scoreUpdates.set(email, newScore);
-            
-            // Mettre à jour le participant
-            if (participants.has(email)) {
-                participants.get(email).score = newScore;
-            }
-        }
-    }
-    
-    // Préparer les données pour le broadcast
-    let correctAnswer = currentQuestion.correctAnswer;
-    let correctText = '';
-    
-    if (currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'true_false' || !currentQuestion.type) {
-        correctText = currentQuestion.options[currentQuestion.correctAnswer];
-    } else if (currentQuestion.type === 'free_text') {
-        correctText = currentQuestion.correctAnswers.join(' ou ');
-    }
+    const currentQuestion = questions[currentQuestionIndex];
+    const currentScores = Array.from(scores.entries()).map(([email, score]) => ({ email, score }));
     
     broadcastMessage({
-        type: 'answer-revealed',
-        email: currentUser,
-        correctAnswer: correctAnswer,
-        correctText: correctText,
-        userAnswers: Array.from(userAnswers.entries()),
-        scores: Array.from(scores.entries()),
-        questionType: currentQuestion.type
+        type: 'show-answer',
+        question: currentQuestion,
+        scores: currentScores
+    });
+    
+    updateGameControls();
+}
+
+function showLeaderboard() {
+    gameState = 'finished';
+    
+    const finalScores = Array.from(scores.entries())
+        .map(([email, score]) => ({ email, score }))
+        .sort((a, b) => b.score - a.score);
+    
+    broadcastMessage({
+        type: 'show-leaderboard',
+        scores: finalScores
+    });
+    
+    updateGameControls();
+}
+
+function resetGame() {
+    if (!confirm('Êtes-vous sûr de vouloir réinitialiser le jeu ?')) {
+        return;
+    }
+    
+    gameState = 'waiting';
+    currentQuestionIndex = 0;
+    userAnswers.clear();
+    scores.clear();
+    
+    // Réinitialiser les participants
+    participants.forEach((participant, email) => {
+        participant.answered = false;
+        scores.set(email, 0);
+    });
+    
+    broadcastMessage({
+        type: 'game-reset'
     });
     
     updateGameControls();
     updateResponsesDisplay();
-    saveSession(); // Sauvegarder l'état
-}
-
-function showLeaderboard() {
-    const leaderboard = generateLeaderboard();
     
-    broadcastMessage({
-        type: 'show-leaderboard',
-        email: currentUser,
-        leaderboard: leaderboard
-    });
-}
-
-function resetGame() {
-    if (confirm('Êtes-vous sûr de vouloir remettre à zéro le jeu ? Tous les scores seront perdus.')) {
-        // Réinitialiser l'état du jeu
-        gameState = 'waiting';
-        currentQuestionIndex = 0;
-        
-        // Réinitialiser les scores des participants
-        participants.forEach((participant, email) => {
-            participant.score = 0;
-            participant.answers = [];
-        });
-        
-        // Diffuser le message de reset
-        broadcastMessage({
-            type: 'game-reset',
-            email: currentUser
-        });
-        
-        // Mettre à jour l'interface admin
-        updateGameControls();
-        updateResponsesDisplay();
-        saveSession(); // Sauvegarder l'état
-        
-        // Afficher un message de confirmation
-        alert('Le jeu a été remis à zéro avec succès !');
-    }
-}
-
-function generateLeaderboard() {
-    const leaderboard = Array.from(participants.entries())
-        .map(([email, data]) => ({
-            email: email,
-            score: data.score
-        }))
-        .sort((a, b) => b.score - a.score);
-    
-    return leaderboard;
-}
-
-// Timer supprimé - géré par le présentateur
-
-// Gestion des réponses utilisateur
-function selectAnswer(optionIndex) {
-    console.log('🎯 Sélection réponse:', optionIndex);
-    
-    userAnswers.set(currentUser, optionIndex);
-    
-    // Mettre à jour l'affichage
-    document.querySelectorAll('.option-btn').forEach((btn, index) => {
-        btn.classList.remove('selected');
-        if (index === optionIndex) {
-            btn.classList.add('selected');
-        }
-    });
-    
-    // Notifier l'admin
-    broadcastMessage({
-        type: 'answer-submitted',
-        email: currentUser,
-        answer: optionIndex
-    });
-    
-    // Sauvegarder la session
-    saveSession();
-}
-
-function submitFreeTextAnswer() {
-    const input = document.getElementById('free-text-answer');
-    const submitBtn = document.querySelector('.free-text-submit');
-    
-    if (!input || !input.value.trim()) {
-        alert('Veuillez saisir une réponse');
-        return;
-    }
-    
-    const answer = input.value.trim();
-    
-    // Désactiver l'input et le bouton
-    input.disabled = true;
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Réponse envoyée ✅';
-    
-    // Stocker la réponse
-    userAnswers.set(currentUser, answer);
-    
-    // Notifier l'admin
-    broadcastMessage({
-        type: 'answer-submitted',
-        email: currentUser,
-        answer: answer
-    });
-    
-    // Sauvegarder la session
-    saveSession();
-    
-    console.log('🎯 Réponse texte libre envoyée:', answer);
-}
-
-// Communication WebSocket
-function broadcastMessage(message) {
-    console.log('📤 Envoi:', message.type);
-    
-    if (!socket) {
-        console.error('❌ Socket non initialisé');
-        return;
-    }
-    
-    if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(message));
-        console.log('✅ Message envoyé');
-    } else {
-        console.warn('⚠️ WebSocket non ouvert, état:', socket.readyState);
-    }
-}
-
-function handleWebSocketMessage(event) {
-    try {
-        // S'assurer que les données sont bien une string
-        const messageData = typeof event.data === 'string' ? event.data : event.data.toString();
-        const message = JSON.parse(messageData);
-        console.log('📨 Reçu:', message.type);
-        
-        // Ignorer ses propres messages
-        if (message.email === currentUser) {
-            return;
-        }
-    
-    switch (message.type) {
-        case 'participant-joined':
-            if (isAdmin) {
-                participants.set(message.email, { 
-                    email: message.email, 
-                    score: 0, 
-                    connected: true 
-                });
-                updateParticipantsCount();
-                saveSession(); // Sauvegarder quand un participant rejoint
-            }
-            break;
-            
-        case 'participant-left':
-            if (isAdmin) {
-                participants.delete(message.email);
-                updateParticipantsCount();
-                saveSession(); // Sauvegarder quand un participant part
-            }
-            break;
-            
-        case 'game-started':
-            if (!isAdmin) {
-                console.log('🎮 Affichage question');
-                showQuestion(message.question, message.questionNumber, message.totalQuestions);
-            }
-            break;
-            
-        case 'next-question':
-            if (!isAdmin) {
-                hideBlockAnswersAnimation(); // Fermer l'animation de blocage
-                showQuestion(message.question, message.questionNumber, message.totalQuestions);
-            }
-            break;
-            
-        case 'answers-blocked':
-            if (!isAdmin) {
-                disableAnswerButtons();
-                showBlockAnimationForUser(message.participants, message.userAnswers, message.currentQuestion);
-            }
-            break;
-            
-        case 'answer-revealed':
-            if (!isAdmin) {
-                hideBlockAnswersAnimation(); // Fermer l'animation de blocage
-                showAnswerFeedback(message.correctAnswer, message.correctText, message.questionType);
-                updateUserScore(message.scores);
-            }
-            break;
-            
-        case 'answer-submitted':
-            if (isAdmin) {
-                // Enregistrer la réponse de l'utilisateur
-                userAnswers.set(message.email, message.answer);
-                updateResponsesDisplay(); // Mise à jour en temps réel
-                saveSession(); // Sauvegarder les réponses
-            }
-            break;
-            
-        case 'show-leaderboard':
-            if (!isAdmin) {
-                hideBlockAnswersAnimation(); // Fermer l'animation de blocage
-                displayLeaderboard(message.leaderboard);
-            }
-            break;
-            
-        case 'game-finished':
-            if (!isAdmin) {
-                hideBlockAnswersAnimation(); // Fermer l'animation de blocage
-                displayLeaderboard(message.leaderboard);
-            }
-            break;
-            
-        case 'game-reset':
-            if (!isAdmin) {
-                // Réinitialiser l'interface utilisateur
-                document.getElementById('waiting-message').style.display = 'block';
-                document.getElementById('question-container').style.display = 'none';
-                document.getElementById('leaderboard-container').style.display = 'none';
-                
-                // Réinitialiser le score affiché
-                document.getElementById('user-score').textContent = 'Score: 0';
-                
-                // Réinitialiser les variables utilisateur
-                userScore = 0;
-                selectedAnswer = null;
-                
-                // Afficher un message de notification
-                const waitingMessage = document.getElementById('waiting-message');
-                waitingMessage.innerHTML = '<h3>🔄 Le jeu a été remis à zéro</h3><p>En attente du prochain quiz...</p>';
-            }
-            break;
-    }
-    
-    } catch (error) {
-        console.error('❌ Erreur parsing message WebSocket:', error);
-        console.error('❌ Données reçues:', event.data);
-    }
+    console.log('🔄 Jeu réinitialisé');
 }
 
 // Interface utilisateur
-function showQuestion(question, questionNumber, totalQuestions) {
-    document.getElementById('waiting-message').style.display = 'none';
-    document.getElementById('question-container').style.display = 'block';
-    document.getElementById('leaderboard-container').style.display = 'none';
-    
-    document.getElementById('question-number').textContent = `Question ${questionNumber}/${totalQuestions}`;
-    document.getElementById('question-text-display').textContent = question.text;
-    
-    const optionsContainer = document.getElementById('options-container');
-    optionsContainer.innerHTML = '';
-    
-    // Affichage selon le type de question
-    switch (question.type) {
-        case 'multiple_choice':
-        case 'true_false':
-            question.options.forEach((option, index) => {
-                const button = document.createElement('button');
-                button.className = 'option-btn';
-                button.textContent = option;
-                button.onclick = () => selectAnswer(index);
-                optionsContainer.appendChild(button);
-            });
-            break;
-            
-        case 'free_text':
-            const inputContainer = document.createElement('div');
-            inputContainer.className = 'free-text-container';
-            
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'free-text-input';
-            input.placeholder = 'Tapez votre réponse...';
-            input.id = 'free-text-answer';
-            
-            const submitBtn = document.createElement('button');
-            submitBtn.className = 'free-text-submit';
-            submitBtn.textContent = 'Valider ma réponse';
-            submitBtn.onclick = () => submitFreeTextAnswer();
-            
-            // Permettre la validation avec Entrée
-            input.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    submitFreeTextAnswer();
-                }
-            });
-            
-            inputContainer.appendChild(input);
-            inputContainer.appendChild(submitBtn);
-            optionsContainer.appendChild(inputContainer);
-            
-            // Focus sur l'input
-            setTimeout(() => input.focus(), 100);
-            break;
-            
-        default:
-            // Questions sans type ou anciennes questions (traiter comme choix multiple)
-            if (question.options && question.options.length > 0) {
-                question.options.forEach((option, index) => {
-                    const button = document.createElement('button');
-                    button.className = 'option-btn';
-                    button.textContent = option;
-                    button.onclick = () => selectAnswer(index);
-                    optionsContainer.appendChild(button);
-                });
-            }
-            break;
-    }
-    
-    document.getElementById('answer-feedback').innerHTML = '';
-    document.getElementById('answer-feedback').className = 'feedback';
-}
-
-function disableAnswerButtons() {
-    document.querySelectorAll('.option-btn').forEach(btn => {
-        btn.disabled = true;
-    });
-    
-    // Désactiver aussi les champs de texte libre
-    const freeTextInput = document.getElementById('free-text-answer');
-    const freeTextSubmit = document.querySelector('.free-text-submit');
-    
-    if (freeTextInput) {
-        freeTextInput.disabled = true;
-    }
-    if (freeTextSubmit) {
-        freeTextSubmit.disabled = true;
-    }
-}
-
-function showAnswerFeedback(correctAnswer, correctText, questionType) {
-    const userAnswer = userAnswers.get(currentUser);
-    const feedback = document.getElementById('answer-feedback');
-    
-    let isCorrect = false;
-    
-    // Déterminer si la réponse est correcte selon le type
-    if (questionType === 'multiple_choice' || questionType === 'true_false' || !questionType) {
-        isCorrect = userAnswer === correctAnswer;
-        
-        // Mettre à jour les boutons avec animations
-        document.querySelectorAll('.option-btn').forEach((btn, index) => {
-            btn.disabled = true;
-            
-            // Supprimer les anciennes classes d'animation
-            btn.classList.remove('correct-answer', 'incorrect-answer', 'correct-reveal');
-            
-            if (index === correctAnswer) {
-                btn.classList.add('correct');
-                btn.classList.add('correct-reveal');
-            } else if (index === userAnswer && userAnswer !== correctAnswer) {
-                btn.classList.add('incorrect');
-                btn.classList.add('incorrect-answer');
-            }
-        });
-        
-        // Animation spéciale pour la réponse de l'utilisateur s'il a eu juste
-        if (isCorrect) {
-            const userBtn = document.querySelectorAll('.option-btn')[userAnswer];
-            if (userBtn) {
-                userBtn.classList.add('correct-answer');
-            }
-        }
-        
-    } else if (questionType === 'free_text') {
-        // Pour le texte libre, on doit valider via l'API
-        validateFreeTextAnswer(userAnswer, correctText);
-        return; // La fonction validateFreeTextAnswer gère l'affichage
-    }
-    
-    // Afficher le feedback avec animation
-    if (isCorrect) {
-        feedback.innerHTML = `🎉 Correct ! La bonne réponse était : ${correctText}`;
-        feedback.className = 'feedback correct';
-        
-        // Déclencher l'animation plein écran de succès
-        showFullscreenAnimation(true, correctText);
-    } else {
-        feedback.innerHTML = `❌ Incorrect. La bonne réponse était : ${correctText}`;
-        feedback.className = 'feedback incorrect';
-        
-        // Déclencher l'animation plein écran d'échec
-        showFullscreenAnimation(false, correctText);
-    }
-}
-
-async function validateFreeTextAnswer(userAnswer, correctText) {
-    const currentQuestion = questions[currentQuestionIndex];
-    const feedback = document.getElementById('answer-feedback');
-    
-    try {
-        const response = await fetch('/api/validate-answer', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                questionId: currentQuestion.id,
-                userAnswer: userAnswer
-            })
-        });
-        
-        const data = await response.json();
-        const isCorrect = data.isCorrect;
-        
-        // Mettre à jour l'affichage du champ texte
-        const freeTextInput = document.getElementById('free-text-answer');
-        if (freeTextInput) {
-            freeTextInput.classList.add(isCorrect ? 'correct' : 'incorrect');
-        }
-        
-        // Afficher le feedback
-        if (isCorrect) {
-            feedback.innerHTML = `🎉 Correct ! Votre réponse "${userAnswer}" est acceptée.`;
-            feedback.className = 'feedback correct';
-            showFullscreenAnimation(true, userAnswer);
-        } else {
-            feedback.innerHTML = `❌ Incorrect. Réponses acceptées : ${correctText}`;
-            feedback.className = 'feedback incorrect';
-            showFullscreenAnimation(false, correctText);
-        }
-        
-    } catch (error) {
-        console.error('❌ Erreur validation réponse:', error);
-        feedback.innerHTML = `⚠️ Erreur de validation. Réponses acceptées : ${correctText}`;
-        feedback.className = 'feedback incorrect';
-        showFullscreenAnimation(false, correctText);
-    }
-}
-
-function updateUserScore(newScores) {
-    const userScore = newScores.find(([email]) => email === currentUser);
-    if (userScore) {
-        document.getElementById('user-score').textContent = `Score: ${userScore[1]}`;
-    }
-}
-
-// Animations plein écran spectaculaires
-function showFullscreenAnimation(isSuccess, correctText) {
-    const overlay = document.getElementById('fullscreen-animation');
-    const icon = overlay.querySelector('.animation-icon');
-    const text = overlay.querySelector('.animation-text');
-    const confettiContainer = overlay.querySelector('.confetti-container');
-    
-    // Nettoyer les anciens confettis
-    confettiContainer.innerHTML = '';
-    
-    // Configurer l'animation selon le résultat
-    if (isSuccess) {
-        icon.innerHTML = '🎉';
-        icon.className = 'animation-icon success';
-        text.innerHTML = 'BRAVO !<br>Bonne réponse !';
-        text.className = 'animation-text success';
-        
-        // Créer les confettis
-        createConfetti(confettiContainer);
-        
-        // Effet sonore visuel (vibration de l'écran)
-        document.body.style.animation = 'none';
-        setTimeout(() => {
-            document.body.style.animation = 'celebration 0.5s ease-in-out';
-        }, 10);
-    } else {
-        icon.innerHTML = '💥';
-        icon.className = 'animation-icon error';
-        text.innerHTML = 'DOMMAGE !<br>Réponse incorrecte';
-        text.className = 'animation-text error';
-        
-        // Effet de secousse de l'écran
-        document.body.classList.add('shake-screen');
-        setTimeout(() => {
-            document.body.classList.remove('shake-screen');
-        }, 600);
-        
-        // Créer des particules d'échec
-        createFailParticles(confettiContainer);
-    }
-    
-    // Afficher l'overlay
-    overlay.style.display = 'flex';
-    
-    // Masquer automatiquement après 3 secondes
-    setTimeout(() => {
-        overlay.style.opacity = '0';
-        setTimeout(() => {
-            overlay.style.display = 'none';
-            overlay.style.opacity = '1';
-            confettiContainer.innerHTML = '';
-        }, 300);
-    }, 3000);
-}
-
-function createConfetti(container) {
-    const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a29bfe', '#fd79a8', '#00b894'];
-    const confettiCount = 100;
-    
-    for (let i = 0; i < confettiCount; i++) {
-        const confetti = document.createElement('div');
-        confetti.className = 'confetti';
-        confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-        confetti.style.left = Math.random() * 100 + '%';
-        confetti.style.animationDelay = Math.random() * 3 + 's';
-        confetti.style.animationDuration = (Math.random() * 2 + 2) + 's';
-        
-        // Formes variées
-        const shapes = ['square', 'circle', 'triangle'];
-        const shape = shapes[Math.floor(Math.random() * shapes.length)];
-        
-        if (shape === 'circle') {
-            confetti.style.borderRadius = '50%';
-        } else if (shape === 'triangle') {
-            confetti.style.width = '0';
-            confetti.style.height = '0';
-            confetti.style.borderLeft = '5px solid transparent';
-            confetti.style.borderRight = '5px solid transparent';
-            confetti.style.borderBottom = '10px solid ' + confetti.style.backgroundColor;
-            confetti.style.backgroundColor = 'transparent';
-        }
-        
-        container.appendChild(confetti);
-    }
-}
-
-function createFailParticles(container) {
-    const particleCount = 30;
-    
-    for (let i = 0; i < particleCount; i++) {
-        const particle = document.createElement('div');
-        particle.className = 'confetti';
-        particle.style.backgroundColor = '#ff4757';
-        particle.style.left = Math.random() * 100 + '%';
-        particle.style.animationDelay = Math.random() * 2 + 's';
-        particle.style.animationDuration = (Math.random() * 1.5 + 1.5) + 's';
-        particle.style.opacity = '0.7';
-        
-        container.appendChild(particle);
-    }
-}
-
-function displayLeaderboard(leaderboard) {
-    document.getElementById('waiting-message').style.display = 'none';
-    document.getElementById('question-container').style.display = 'none';
-    document.getElementById('leaderboard-container').style.display = 'block';
-    
-    const leaderboardList = document.getElementById('leaderboard-list');
-    leaderboardList.innerHTML = '';
-    
-    leaderboard.forEach((participant, index) => {
-        const item = document.createElement('div');
-        item.className = 'leaderboard-item';
-        item.innerHTML = `
-            <span class="leaderboard-rank">#${index + 1}</span>
-            <span>${participant.email}</span>
-            <span class="leaderboard-score">${participant.score} points</span>
-        `;
-        leaderboardList.appendChild(item);
-    });
-}
-
-// Interface admin
 function updateUI() {
     if (isAdmin) {
         document.getElementById('admin-email').textContent = currentUser;
-        updateParticipantsCount();
-        updateQuestionsDisplay();
-        updateGameControls();
+        document.getElementById('session-indicator').textContent = `🗂️ Session onglet (${tabId})`;
     } else {
         document.getElementById('user-email').textContent = currentUser;
-        document.getElementById('user-score').textContent = 'Score: 0';
+        document.getElementById('user-session-indicator').textContent = `🗂️ Session onglet (${tabId})`;
+        updateUserScore();
     }
-}
-
-function updateCurrentQuestionDisplay(question, questionNumber, totalQuestions) {
-    const currentQuestionDisplay = document.getElementById('current-question-display');
-    if (currentQuestionDisplay) {
-        currentQuestionDisplay.innerHTML = `
-            <h4>Question ${questionNumber}/${totalQuestions}</h4>
-            <p><strong>${question.text}</strong></p>
-            <div style="margin-top: 10px;">
-                ${question.options.map((option, index) => `
-                    <div style="padding: 5px; margin: 2px 0; background: ${index === question.correctAnswer ? '#dcfce7' : '#f8fafc'}; border-radius: 4px;">
-                        ${String.fromCharCode(65 + index)}. ${option} ${index === question.correctAnswer ? '✅' : ''}
-                    </div>
-                `).join('')}
-            </div>
-        `;
-    }
+    
+    updateParticipantsCount();
 }
 
 function updateParticipantsCount() {
     const count = participants.size;
-    document.getElementById('participants-count').textContent = count;
+    const countElement = document.getElementById('participants-count');
+    if (countElement) {
+        countElement.textContent = count;
+    }
+}
+
+function updateUserScore() {
+    const userScore = scores.get(currentUser) || 0;
+    const scoreElement = document.getElementById('user-score');
+    if (scoreElement) {
+        scoreElement.textContent = `Score: ${userScore}`;
+    }
 }
 
 function updateGameControls() {
     const startBtn = document.getElementById('start-game-btn');
     const nextBtn = document.getElementById('next-question-btn');
     const blockBtn = document.getElementById('block-answers-btn');
-    const showBtn = document.getElementById('show-answer-btn');
+    const showAnswerBtn = document.getElementById('show-answer-btn');
     const leaderboardBtn = document.getElementById('show-leaderboard-btn');
     
-    // Reset tous les boutons
-    [startBtn, nextBtn, blockBtn, showBtn, leaderboardBtn].forEach(btn => {
-        btn.disabled = true;
-    });
+    // Réinitialiser tous les boutons
+    startBtn.disabled = false;
+    nextBtn.disabled = true;
+    blockBtn.disabled = true;
+    showAnswerBtn.disabled = true;
+    leaderboardBtn.disabled = true;
     
     switch (gameState) {
         case 'waiting':
-            startBtn.disabled = false;
+            startBtn.disabled = questions.length === 0;
             break;
         case 'question':
+            startBtn.disabled = true;
             blockBtn.disabled = false;
             break;
         case 'blocked':
-            showBtn.disabled = false;
+            startBtn.disabled = true;
+            showAnswerBtn.disabled = false;
             break;
         case 'answer':
+            startBtn.disabled = true;
             if (currentQuestionIndex < questions.length - 1) {
                 nextBtn.disabled = false;
             } else {
@@ -1564,11 +1262,11 @@ function updateGameControls() {
             }
             break;
         case 'finished':
-            leaderboardBtn.disabled = false;
+            startBtn.disabled = false;
             break;
     }
     
-    // Mettre à jour l'affichage de la question courante
+    // Mettre à jour l'affichage de la question actuelle
     const currentQuestionDisplay = document.getElementById('current-question-display');
     if (gameState === 'waiting') {
         currentQuestionDisplay.innerHTML = '<p>Aucune question active</p>';
@@ -1577,6 +1275,7 @@ function updateGameControls() {
         currentQuestionDisplay.innerHTML = `
             <h4>Question ${currentQuestionIndex + 1}/${questions.length}</h4>
             <p>${question.text}</p>
+            <small>Type: ${getQuestionTypeLabel(question.type)}</small>
         `;
     }
 }
@@ -1585,348 +1284,292 @@ function updateResponsesDisplay() {
     const container = document.getElementById('responses-container');
     container.innerHTML = '';
     
-    if (gameState === 'question' || gameState === 'blocked' || gameState === 'answer') {
-        const currentQuestion = questions[currentQuestionIndex];
-        
-        // Afficher un résumé en temps réel
-        const summary = document.createElement('div');
-        summary.className = 'responses-summary';
-        const totalParticipants = participants.size;
-        const totalAnswers = userAnswers.size;
-        const correctAnswers = Array.from(userAnswers.entries()).filter(([email, answer]) => 
-            answer === currentQuestion.correctAnswer
-        ).length;
-        
-        // Titre différent selon l'état
-        const titleText = gameState === 'question' ? 'Réponses en temps réel' : 'Résumé final';
-        
-        summary.innerHTML = `
-            <h4 style="margin-bottom: 15px; color: var(--primary-color);">${titleText}</h4>
-            <div class="summary-stats">
-                <div class="stat-item">
-                    <span class="stat-number">${totalAnswers}</span>
-                    <span class="stat-label">Réponses reçues</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-number">${correctAnswers}</span>
-                    <span class="stat-label">Bonnes réponses</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-number">${totalParticipants - totalAnswers}</span>
-                    <span class="stat-label">En attente</span>
-                </div>
-            </div>
-        `;
-        
-        container.appendChild(summary);
-        
-        // Afficher les réponses détaillées seulement si bloqué ou révélé
-        if (gameState === 'blocked' || gameState === 'answer') {
-            // Afficher les réponses de tous les participants
-            participants.forEach((participant, email) => {
-                const item = document.createElement('div');
-                
-                if (userAnswers.has(email)) {
-                    const answer = userAnswers.get(email);
-                    const isCorrect = answer === currentQuestion.correctAnswer;
-                    item.className = `response-item ${isCorrect ? 'correct' : 'incorrect'}`;
-                    item.innerHTML = `
-                        <span><strong>${email}</strong></span>
-                        <span>${currentQuestion.options[answer]} ${isCorrect ? '✅' : '❌'}</span>
-                    `;
-                } else {
-                    // Participant qui n'a pas répondu
-                    item.className = 'response-item no-answer';
-                    item.innerHTML = `
-                        <span><strong>${email}</strong></span>
-                        <span>Pas de réponse ⏳</span>
-                    `;
-                }
-                
-                container.appendChild(item);
-            });
-        } else if (gameState === 'question') {
-                    // Pendant la question, afficher qui a répondu avec leur réponse
-        participants.forEach((participant, email) => {
-            const item = document.createElement('div');
-            
-            if (userAnswers.has(email)) {
-                const answer = userAnswers.get(email);
-                let isCorrect = false;
-                let displayAnswer = '';
-                
-                if (currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'true_false' || !currentQuestion.type) {
-                    isCorrect = answer === currentQuestion.correctAnswer;
-                    displayAnswer = currentQuestion.options[answer];
-                } else if (currentQuestion.type === 'free_text') {
-                    // Pour le texte libre, on ne peut pas vérifier facilement ici
-                    // On affiche juste la réponse
-                    displayAnswer = answer;
-                    isCorrect = false; // On ne sait pas encore
-                }
-                
-                item.className = `response-item ${isCorrect ? 'correct' : 'incorrect'}`;
-                item.innerHTML = `
-                    <span><strong>${email}</strong></span>
-                    <span>${displayAnswer} ${isCorrect ? '✅' : (currentQuestion.type === 'free_text' ? '📝' : '❌')}</span>
-                `;
-            } else {
-                item.className = 'response-item no-answer';
-                item.innerHTML = `
-                    <span><strong>${email}</strong></span>
-                    <span>⏳ En attente...</span>
-                `;
-            }
-            
-            container.appendChild(item);
-        });
-        }
-    }
-}
-
-// Chargement des données depuis le serveur
-async function loadQuestionsFromServer() {
-    try {
-        const response = await fetch('/api/questions');
-        const data = await response.json();
-        
-        if (response.ok) {
-            questions = data.questions || [];
-            updateQuestionsDisplay();
-            console.log('✅ Questions chargées depuis le serveur:', questions.length);
-        } else {
-            console.error('❌ Erreur lors du chargement des questions:', data.error);
-        }
-    } catch (error) {
-        console.error('❌ Erreur lors du chargement des questions:', error);
-        // Fallback vers localStorage si le serveur n'est pas disponible
-        loadSavedData();
-    }
-}
-
-// Sauvegarde des données (fallback local)
-function saveData() {
-    const data = {
-        questions: questions
-    };
-    localStorage.setItem('quizData', JSON.stringify(data));
-}
-
-function loadSavedData() {
-    const saved = localStorage.getItem('quizData');
-    if (saved) {
-        const data = JSON.parse(saved);
-        questions = data.questions || [];
-        updateQuestionsDisplay();
-    }
-}
-
-
-
-// Vérification des droits administrateur
-async function checkAdminAccess() {
-    const email = document.getElementById('email').value;
-    const adminToggle = document.querySelector('.admin-toggle');
-    const adminCheckbox = document.getElementById('admin-mode');
-    
-    if (!email) {
-        adminToggle.style.display = 'none';
+    if (participants.size === 0) {
+        container.innerHTML = '<p>Aucun participant connecté</p>';
         return;
     }
     
-    try {
-        const response = await fetch('/api/check-admin', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ email: email })
-        });
+    participants.forEach((participant, email) => {
+        const responseElement = document.createElement('div');
+        responseElement.className = 'response-item';
         
-        const data = await response.json();
+        const answer = userAnswers.get(email);
+        const score = scores.get(email) || 0;
         
-        if (data.isAdmin) {
-            adminToggle.style.display = 'block';
-            adminToggle.style.opacity = '1';
-        } else {
-            adminToggle.style.display = 'none';
-            adminCheckbox.checked = false;
-        }
-        
-    } catch (error) {
-        console.error('❌ Erreur lors de la vérification admin:', error);
-        adminToggle.style.display = 'none';
-        adminCheckbox.checked = false;
-    }
-}
-
-// Animation de blocage des réponses (supprimée - plus utilisée côté admin)
-
-function hideBlockAnswersAnimation() {
-    // Vérifier qu'on est bien côté utilisateur
-    if (isAdmin) {
-        return; // Ne pas manipuler l'animation côté admin
-    }
-    
-    const overlay = document.getElementById('block-answers-animation');
-    if (overlay && overlay.style.display === 'flex') {
-        overlay.style.opacity = '0';
-        
-        setTimeout(() => {
-            overlay.style.display = 'none';
-            overlay.style.opacity = '1';
-        }, 300);
-    }
-}
-
-// Fonction pour afficher l'animation côté utilisateur avec révélation progressive des vraies réponses
-function showBlockAnimationForUser(participantsData, userAnswersData, currentQuestion) {
-    // Vérifier qu'on est bien côté utilisateur
-    if (isAdmin) {
-        return; // Ne pas afficher l'animation côté admin
-    }
-    
-    const overlay = document.getElementById('block-answers-animation');
-    const playersGrid = document.getElementById('players-grid');
-    
-    // Nettoyer le contenu précédent
-    playersGrid.innerHTML = '';
-    
-    // Utiliser les données reçues de l'admin
-    const participantsList = participantsData || [];
-    const userAnswersMap = new Map(userAnswersData || []);
-    
-    // Stocker les données pour les fonctions d'animation
-    window.animationData = {
-        participants: participantsList,
-        userAnswers: userAnswersMap,
-        currentQuestion: currentQuestion
-    };
-    
-    console.log('🎬 Animation avec', participantsList.length, 'participants');
-    
-    participantsList.forEach(([email, participant], index) => {
-        const playerCard = document.createElement('div');
-        playerCard.className = 'player-card';
-        
-        // État initial : vérification
-        let statusIcon = '⏳';
-        let statusText = 'Vérification...';
-        
-        playerCard.innerHTML = `
-            <div class="player-name">${email}</div>
-            <div class="player-status">${statusIcon}</div>
-            <div class="player-result">${statusText}</div>
+        responseElement.innerHTML = `
+            <div class="participant-info">
+                <span class="participant-email">${email}</span>
+                <span class="participant-score">Score: ${score}</span>
+            </div>
+            <div class="participant-status">
+                ${participant.answered ? 
+                    `<span class="answered">✅ Répondu: ${formatAnswer(answer)}</span>` : 
+                    '<span class="waiting">⏳ En attente...</span>'
+                }
+            </div>
         `;
         
-        // Délai d'apparition échelonné
-        playerCard.style.animationDelay = `${index * 0.1}s`;
+        container.appendChild(responseElement);
+    });
+}
+
+function formatAnswer(answer) {
+    if (answer === undefined || answer === null) return 'N/A';
+    if (typeof answer === 'number') return `Option ${answer + 1}`;
+    return answer.toString();
+}
+
+// Gestion des réponses utilisateur
+function handleUserAnswer(email, answer, questionId) {
+    if (gameState !== 'question') return;
+    
+    const participant = participants.get(email);
+    if (!participant) return;
+    
+    participant.answered = true;
+    userAnswers.set(email, answer);
+    
+    // Valider la réponse
+    const currentQuestion = questions[currentQuestionIndex];
+    if (currentQuestion && currentQuestion.id === questionId) {
+        const isCorrect = validateAnswer(currentQuestion, answer);
         
+        if (isCorrect) {
+            const currentScore = scores.get(email) || 0;
+            scores.set(email, currentScore + 1);
+        }
+        
+        console.log(`📝 Réponse de ${email}: ${formatAnswer(answer)} - ${isCorrect ? '✅' : '❌'}`);
+    }
+    
+    updateResponsesDisplay();
+}
+
+// Fonctions côté utilisateur
+function showQuestion(question, questionIndex) {
+    const waitingMessage = document.getElementById('waiting-message');
+    const questionContainer = document.getElementById('question-container');
+    const leaderboardContainer = document.getElementById('leaderboard-container');
+    
+    waitingMessage.style.display = 'none';
+    questionContainer.style.display = 'block';
+    leaderboardContainer.style.display = 'none';
+    
+    document.getElementById('question-number').textContent = `Question ${questionIndex + 1}`;
+    document.getElementById('question-text-display').textContent = question.text;
+    
+    const optionsContainer = document.getElementById('options-container');
+    optionsContainer.innerHTML = '';
+    
+    switch (question.type) {
+        case 'multiple_choice':
+            question.options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.className = 'option-btn';
+                button.textContent = option;
+                button.onclick = () => submitAnswer(index, question.id);
+                optionsContainer.appendChild(button);
+            });
+            break;
+            
+        case 'true_false':
+            ['Vrai', 'Faux'].forEach((option, index) => {
+                const button = document.createElement('button');
+                button.className = 'option-btn';
+                button.textContent = option;
+                button.onclick = () => submitAnswer(index, question.id);
+                optionsContainer.appendChild(button);
+            });
+            break;
+            
+        case 'free_text':
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'Votre réponse...';
+            input.className = 'free-text-input';
+            
+            const submitBtn = document.createElement('button');
+            submitBtn.textContent = 'Valider';
+            submitBtn.className = 'submit-btn';
+            submitBtn.onclick = () => {
+                if (input.value.trim()) {
+                    submitAnswer(input.value.trim(), question.id);
+                }
+            };
+            
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && input.value.trim()) {
+                    submitAnswer(input.value.trim(), question.id);
+                }
+            });
+            
+            optionsContainer.appendChild(input);
+            optionsContainer.appendChild(submitBtn);
+            input.focus();
+            break;
+    }
+    
+    // Effacer le feedback précédent
+    document.getElementById('answer-feedback').innerHTML = '';
+}
+
+function submitAnswer(answer, questionId) {
+    if (gameState !== 'question') return;
+    
+    // Désactiver les boutons
+    document.querySelectorAll('.option-btn, .submit-btn').forEach(btn => {
+        btn.disabled = true;
+    });
+    
+    // Envoyer la réponse
+    broadcastMessage({
+        type: 'user-answer',
+        email: currentUser,
+        answer: answer,
+        questionId: questionId
+    });
+    
+    // Afficher le feedback
+    document.getElementById('answer-feedback').innerHTML = 
+        '<p class="feedback-message">✅ Réponse envoyée !</p>';
+    
+    console.log('📤 Réponse envoyée:', answer);
+}
+
+function blockUserAnswers() {
+    // Désactiver tous les boutons de réponse
+    document.querySelectorAll('.option-btn, .submit-btn, .free-text-input').forEach(element => {
+        element.disabled = true;
+    });
+    
+    document.getElementById('answer-feedback').innerHTML = 
+        '<p class="feedback-blocked">🚫 Réponses bloquées</p>';
+}
+
+function showCorrectAnswer(question, scores) {
+    let correctAnswerText = '';
+    
+    switch (question.type) {
+        case 'multiple_choice':
+            correctAnswerText = question.options[question.correct_answer];
+            break;
+        case 'true_false':
+            correctAnswerText = question.correct_answer === 0 ? 'Vrai' : 'Faux';
+            break;
+        case 'free_text':
+            correctAnswerText = question.correct_answers.join(', ');
+            break;
+    }
+    
+    document.getElementById('answer-feedback').innerHTML = `
+        <div class="correct-answer">
+            <p><strong>Réponse correcte:</strong> ${correctAnswerText}</p>
+        </div>
+    `;
+    
+    // Mettre à jour le score
+    updateUserScore();
+}
+
+function showFinalLeaderboard(scores) {
+    const waitingMessage = document.getElementById('waiting-message');
+    const questionContainer = document.getElementById('question-container');
+    const leaderboardContainer = document.getElementById('leaderboard-container');
+    
+    waitingMessage.style.display = 'none';
+    questionContainer.style.display = 'none';
+    leaderboardContainer.style.display = 'block';
+    
+    const leaderboardList = document.getElementById('leaderboard-list');
+    leaderboardList.innerHTML = '';
+    
+    scores.forEach((player, index) => {
+        const item = document.createElement('div');
+        item.className = 'leaderboard-item';
+        
+        let medal = '';
+        if (index === 0) medal = '🥇';
+        else if (index === 1) medal = '🥈';
+        else if (index === 2) medal = '🥉';
+        
+        item.innerHTML = `
+            <span class="rank">${medal} ${index + 1}</span>
+            <span class="player">${player.email}</span>
+            <span class="score">${player.score} points</span>
+        `;
+        
+        leaderboardList.appendChild(item);
+    });
+}
+
+function resetUserGame() {
+    gameState = 'waiting';
+    
+    const waitingMessage = document.getElementById('waiting-message');
+    const questionContainer = document.getElementById('question-container');
+    const leaderboardContainer = document.getElementById('leaderboard-container');
+    
+    waitingMessage.style.display = 'block';
+    questionContainer.style.display = 'none';
+    leaderboardContainer.style.display = 'none';
+    
+    // Réinitialiser le score
+    scores.set(currentUser, 0);
+    updateUserScore();
+}
+
+// Animations
+function showBlockAnswersAnimation() {
+    const overlay = document.getElementById('block-answers-animation');
+    if (!overlay) return;
+    
+    const playersGrid = document.getElementById('players-grid');
+    playersGrid.innerHTML = '';
+    
+    participants.forEach((participant, email) => {
+        const playerCard = document.createElement('div');
+        playerCard.className = 'player-card';
+        playerCard.innerHTML = `
+            <div class="player-email">${email}</div>
+            <div class="player-status ${participant.answered ? 'answered' : 'waiting'}">
+                ${participant.answered ? '✅ Répondu' : '⏳ En attente'}
+            </div>
+        `;
         playersGrid.appendChild(playerCard);
     });
     
-    // Afficher l'overlay
     overlay.style.display = 'flex';
     
-    // Démarrer l'effet randomisé puis révéler les vraies réponses
-    startRandomizedReveal();
-    
-    // L'animation reste affichée jusqu'à ce que l'admin clique sur "Afficher les réponses"
+    setTimeout(() => {
+        overlay.style.display = 'none';
+    }, 3000);
 }
 
-// Fonction pour démarrer l'effet randomisé puis révéler les vraies réponses
-function startRandomizedReveal() {
-    let randomizeCount = 0;
-    const maxRandomizations = 2; // Réduit de 5 à 2 cycles
-    
-    const randomizeInterval = setInterval(() => {
-        if (randomizeCount < maxRandomizations) {
-            // Effet randomisé
-            redistributeRandomColors();
-            randomizeCount++;
-        } else {
-            // Révéler les vraies réponses
-            clearInterval(randomizeInterval);
-            revealTrueAnswers();
-        }
-    }, 600); // Accéléré de 800ms à 600ms
+// Fonctions utilitaires
+function toggleSortMode() {
+    // Implémentation du tri des questions (à compléter si nécessaire)
+    alert('Fonctionnalité de tri en cours de développement');
 }
 
-// Fonction pour redistribuer les couleurs aléatoirement
-function redistributeRandomColors() {
-    const playerCards = document.querySelectorAll('.player-card');
-    
-    playerCards.forEach((card, index) => {
-        // Retirer les anciennes classes
-        card.classList.remove('correct', 'incorrect');
-        
-        // Ajouter un effet de transition
-        card.style.transition = 'all 0.5s ease-in-out';
-        
-        // Générer un nouveau résultat aléatoire
-        const randomResult = Math.random() > 0.5;
-        
-        setTimeout(() => {
-            if (randomResult) {
-                card.classList.add('correct');
-                card.querySelector('.player-status').textContent = '✅';
-                card.querySelector('.player-result').textContent = 'Bonne réponse !';
-            } else {
-                card.classList.add('incorrect');
-                card.querySelector('.player-status').textContent = '❌';
-                card.querySelector('.player-result').textContent = 'Réponse incorrecte';
-            }
-        }, index * 50); // Accéléré de 100ms à 50ms
-    });
-}
-
-// Fonction pour révéler les vraies réponses
-function revealTrueAnswers() {
-    const playerCards = document.querySelectorAll('.player-card');
-    
-    // Utiliser les données stockées
-    const animationData = window.animationData;
-    if (!animationData) return;
-    
-    const currentQuestion = animationData.currentQuestion;
-    const userAnswersMap = animationData.userAnswers;
-    
-    // Changer le titre pour indiquer la révélation
-    const blockTitle = document.querySelector('.block-title');
-    if (blockTitle) {
-        blockTitle.textContent = '🎯 Révélation des Réponses';
-        blockTitle.style.color = '#10b981';
+function loadSavedData() {
+    // Charger les données sauvegardées au démarrage
+    if (isAdmin) {
+        loadQuestionsFromServer();
     }
     
-    playerCards.forEach((card, index) => {
-        const email = card.querySelector('.player-name').textContent;
-        
-        // Retirer les anciennes classes
-        card.classList.remove('correct', 'incorrect');
-        
-        // Ajouter un effet de transition plus dramatique
-        card.style.transition = 'all 0.8s ease-in-out';
-        
-        setTimeout(() => {
-            // Déterminer la vraie réponse
-            const hasAnswer = userAnswersMap.has(email);
-            const isCorrect = hasAnswer && userAnswersMap.get(email) === currentQuestion.correctAnswer;
-            
-            if (hasAnswer && isCorrect) {
-                card.classList.add('correct');
-                card.querySelector('.player-status').textContent = '✅';
-                card.querySelector('.player-result').textContent = 'Bonne réponse !';
-            } else {
-                card.classList.add('incorrect');
-                card.querySelector('.player-status').textContent = '❌';
-                card.querySelector('.player-result').textContent = hasAnswer ? 'Réponse incorrecte' : 'Pas de réponse';
-            }
-        }, index * 100); // Accéléré de 150ms à 100ms
-    });
+    // Initialiser l'affichage du seuil
+    updateThresholdDisplay();
+    
+    // Initialiser l'affichage des options selon le type
+    handleQuestionTypeChange();
 }
 
-// Initialiser l'état de l'interface
-document.addEventListener('DOMContentLoaded', function() {
-    const adminToggle = document.querySelector('.admin-toggle');
-    adminToggle.style.display = 'none';
-}); 
+// Gestion de la fermeture de l'onglet
+window.addEventListener('beforeunload', function() {
+    if (currentUser && !isAdmin) {
+        broadcastMessage({
+            type: 'participant-left',
+            email: currentUser
+        });
+    }
+});

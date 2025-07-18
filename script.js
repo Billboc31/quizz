@@ -299,7 +299,7 @@ async function initializeSupabase() {
                         console.error('❌ Erreur canal Realtime, activation du fallback');
                         startPollingFallback();
                     } else if (status === 'TIMED_OUT') {
-                        console.error('⏰ Timeout canal Realtime, activation du fallback');
+                        console.error('⏰  Timeout canal Realtime, activation du fallback');
                         startPollingFallback();
                     } else if (status === 'CLOSED') {
                         console.warn('🔒 Canal Realtime fermé, activation du fallback');

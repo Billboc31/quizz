@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Interactif - Mariages & Team Building</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Écran de connexion -->
+        <div id="login-screen" class="screen active">
+            <div class="login-card">
+                <h1>🎯 Quiz Interactif</h1>
+                <p>Parfait pour mariages et team building</p>
+                <form id="login-form">
+                    <input type="email" id="email" placeholder="Votre adresse email" required>
+                    <button type="submit">Se connecter</button>
+                </form>
+                <div class="admin-toggle">
+                    <label>
+                        <input type="checkbox" id="admin-mode"> Mode Administrateur
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interface Administrateur -->
+        <div id="admin-screen" class="screen">
+            <div class="admin-header">
+                <h2>🎮 Panneau Administrateur</h2>
+                <div class="admin-info">
+                    <span id="admin-email"></span>
+                    <span id="session-indicator" class="session-indicator">🗂️ Session onglet</span>
+                    <button id="logout-btn">Déconnexion</button>
+                </div>
+            </div>
+
+            <div class="admin-tabs">
+                <button class="tab-btn active" data-tab="questions">Questions</button>
+                <button class="tab-btn" data-tab="game">Jeu en cours</button>
+                <button class="tab-btn" data-tab="results">Résultats</button>
+            </div>
+
+            <!-- Gestion des questions -->
+            <div id="questions-tab" class="tab-content active">
+                <div class="question-form">
+                    <h3>Ajouter une question</h3>
+                    
+                    <!-- Sélection du type de question -->
+                    <div class="question-type-selector">
+                        <label>Type de question :</label>
+                        <select id="question-type">
+                            <option value="multiple_choice">Choix multiple</option>
+                            <option value="true_false">Vrai/Faux</option>
+                            <option value="free_text">Texte libre</option>
+                        </select>
+                    </div>
+                    
+                    <input type="text" id="question-text" placeholder="Votre question...">
+                    
+                    <!-- Options pour choix multiple -->
+                    <div id="multiple-choice-options" class="options-container">
+                        <input type="text" class="option-input" placeholder="Option A">
+                        <input type="text" class="option-input" placeholder="Option B">
+                        <input type="text" class="option-input" placeholder="Option C">
+                        <input type="text" class="option-input" placeholder="Option D">
+                    </div>
+                    
+                    <!-- Sélection réponse correcte pour choix multiple -->
+                    <select id="correct-answer">
+                        <option value="0">Réponse correcte: A</option>
+                        <option value="1">Réponse correcte: B</option>
+                        <option value="2">Réponse correcte: C</option>
+                        <option value="3">Réponse correcte: D</option>
+                    </select>
+                    
+                    <!-- Sélection pour vrai/faux -->
+                    <div id="true-false-options" class="true-false-container" style="display: none;">
+                        <label>Réponse correcte :</label>
+                        <select id="true-false-answer">
+                            <option value="0">Vrai</option>
+                            <option value="1">Faux</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Options pour texte libre -->
+                    <div id="free-text-options" class="free-text-container" style="display: none;">
+                        <label>Réponses acceptées (une par ligne) :</label>
+                        <textarea id="free-text-answers" placeholder="Réponse 1&#10;Réponse 2&#10;Réponse 3"></textarea>
+                        <div class="threshold-container">
+                            <label>Seuil de similarité :</label>
+                            <input type="range" id="similarity-threshold" min="0.5" max="1" step="0.1" value="0.8">
+                            <span id="threshold-value">80%</span>
+                        </div>
+                    </div>
+                    
+                    <button id="add-question-btn">Ajouter Question</button>
+                </div>
+                
+                <div class="questions-list">
+                    <h3>Questions créées</h3>
+                    <div class="questions-actions">
+                        <button id="sort-questions-btn">📋 Réorganiser</button>
+                    </div>
+                    <div id="questions-container"></div>
+                </div>
+            </div>
+
+            <!-- Contrôle du jeu -->
+            <div id="game-tab" class="tab-content">
+                <div class="game-controls">
+                    <div class="participants-count">
+                        <span>👥 Participants connectés: <span id="participants-count">0</span></span>
+                    </div>
+                    
+                    <div class="current-question" id="current-question-display">
+                        <p>Aucune question active</p>
+                    </div>
+                    
+                    <div class="game-buttons">
+                        <button id="start-game-btn">🚀 Commencer le Quiz</button>
+                        <button id="next-question-btn" disabled>➡️ Question Suivante</button>
+                        <button id="block-answers-btn" disabled>🚫 Bloquer les Réponses</button>
+                        <button id="show-answer-btn" disabled>✅ Montrer la Réponse</button>
+                        <button id="show-leaderboard-btn" disabled>🏆 Classement Final</button>
+                        <button id="reset-game-btn" class="reset-btn">🔄 Reset Jeu</button>
+                    </div>
+                </div>
+                
+                <div class="live-responses">
+                    <h3>Réponses en temps réel</h3>
+                    <div id="responses-container"></div>
+                </div>
+            </div>
+
+            <!-- Résultats -->
+            <div id="results-tab" class="tab-content">
+                <div class="results-container">
+                    <h3>📊 Statistiques du Quiz</h3>
+                    <div id="stats-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interface Utilisateur -->
+        <div id="user-screen" class="screen">
+            <div class="user-header">
+                <h2>🎯 Quiz Interactif</h2>
+                <div class="user-info">
+                    <span id="user-email"></span>
+                    <span id="user-score">Score: 0</span>
+                    <span id="user-session-indicator" class="session-indicator">🗂️ Session onglet</span>
+                    <button id="user-logout-btn">Déconnexion</button>
+                </div>
+            </div>
+
+            <div class="game-status">
+                <div id="waiting-message" class="status-message">
+                    <h3>⏳ En attente du début du quiz...</h3>
+                    <p>L'administrateur va bientôt commencer le jeu !</p>
+                </div>
+
+                <div id="question-container" class="question-display" style="display: none;">
+                    <div class="question-header">
+                        <span id="question-number">Question 1</span>
+                    </div>
+                    <h3 id="question-text-display"></h3>
+                    <div id="options-container" class="options-grid"></div>
+                    <div id="answer-feedback" class="feedback"></div>
+                </div>
+
+                <div id="leaderboard-container" class="leaderboard" style="display: none;">
+                    <h3>🏆 Classement Final</h3>
+                    <div id="leaderboard-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Animations plein écran -->
+    <div id="fullscreen-animation" class="fullscreen-overlay" style="display: none;">
+        <div class="animation-content">
+            <div class="animation-icon"></div>
+            <div class="animation-text"></div>
+        </div>
+        <div class="confetti-container"></div>
+    </div>
+
+    <!-- Animation de blocage des réponses -->
+    <div id="block-answers-animation" class="block-overlay" style="display: none;">
+        <div class="block-animation-content">
+            <div class="block-title">🚫 Réponses Bloquées</div>
+            <div class="players-grid" id="players-grid"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 

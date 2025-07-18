@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test WebSocket</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #messages {
+            background: white;
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            background: #f8f9fa;
+        }
+        .sent {
+            border-left-color: #28a745;
+        }
+        .received {
+            border-left-color: #dc3545;
+        }
+        .error {
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔗 Test WebSocket - Quiz Interactif</h1>
+    
+    <div class="container">
+        <h3>État de la connexion</h3>
+        <div id="status">Déconnecté</div>
+        <button onclick="connectWebSocket()">Se connecter</button>
+        <button onclick="disconnectWebSocket()">Se déconnecter</button>
+    </div>
+    
+    <div class="container">
+        <h3>Envoyer un message de test</h3>
+        <button onclick="sendTestMessage('participant-joined')">Participant rejoint</button>
+        <button onclick="sendTestMessage('game-started')">Démarrer jeu</button>
+        <button onclick="sendTestMessage('answers-blocked')">Bloquer réponses</button>
+        <button onclick="clearMessages()">Effacer messages</button>
+    </div>
+    
+    <div class="container">
+        <h3>Messages</h3>
+        <div id="messages"></div>
+    </div>
+
+    <script>
+        let socket = null;
+        let messageCount = 0;
+
+        function addMessage(text, type = 'info') {
+            const messages = document.getElementById('messages');
+            const message = document.createElement('div');
+            message.className = `message ${type}`;
+            message.innerHTML = `<strong>[${new Date().toLocaleTimeString()}]</strong> ${text}`;
+            messages.appendChild(message);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function updateStatus(status) {
+            document.getElementById('status').textContent = status;
+        }
+
+        function connectWebSocket() {
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}`;
+                
+                addMessage(`Tentative de connexion à: ${wsUrl}`, 'info');
+                
+                socket = new WebSocket(wsUrl);
+                
+                socket.onopen = () => {
+                    addMessage('✅ Connexion WebSocket établie', 'info');
+                    updateStatus('Connecté');
+                };
+                
+                socket.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    addMessage(`📨 Message reçu: ${JSON.stringify(data, null, 2)}`, 'received');
+                };
+                
+                socket.onclose = (event) => {
+                    addMessage(`❌ Connexion fermée: ${event.code} - ${event.reason}`, 'error');
+                    updateStatus('Déconnecté');
+                };
+                
+                socket.onerror = (error) => {
+                    addMessage(`❌ Erreur WebSocket: ${error}`, 'error');
+                    updateStatus('Erreur');
+                };
+                
+            } catch (error) {
+                addMessage(`❌ Erreur lors de la création: ${error}`, 'error');
+            }
+        }
+
+        function disconnectWebSocket() {
+            if (socket) {
+                socket.close();
+                socket = null;
+                addMessage('🔌 Déconnexion manuelle', 'info');
+                updateStatus('Déconnecté');
+            }
+        }
+
+        function sendTestMessage(type) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                addMessage('❌ WebSocket non connecté', 'error');
+                return;
+            }
+
+            messageCount++;
+            const message = {
+                type: type,
+                email: `test${messageCount}@example.com`,
+                isAdmin: type === 'game-started',
+                timestamp: new Date().toISOString()
+            };
+
+            if (type === 'game-started') {
+                message.question = {
+                    id: messageCount,
+                    text: `Question de test ${messageCount}`,
+                    options: ['Option A', 'Option B', 'Option C', 'Option D'],
+                    correctAnswer: 0
+                };
+                message.questionNumber = 1;
+                message.totalQuestions = 3;
+            }
+
+            socket.send(JSON.stringify(message));
+            addMessage(`📤 Message envoyé: ${JSON.stringify(message, null, 2)}`, 'sent');
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // Auto-connexion au chargement
+        window.addEventListener('load', () => {
+            addMessage('🚀 Page de test WebSocket chargée', 'info');
+            connectWebSocket();
+        });
+    </script>
+</body>
+</html> 

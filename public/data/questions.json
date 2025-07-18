@@ -1,0 +1,89 @@
+{
+  "questions": [
+    {
+      "text": "qu'elle est la couleur du cheval blanc d'henri 4 ?",
+      "type": "free_text",
+      "correctAnswers": [
+        "blanc",
+        "le cheval est blanc",
+        "il est blanc"
+      ],
+      "threshold": 0.8,
+      "id": 1752704508062,
+      "createdBy": "bocquet.pierre@gmail.com",
+      "createdAt": "2025-07-16T22:21:48.062Z"
+    },
+    {
+      "text": "thalamas est hétero",
+      "type": "true_false",
+      "options": [
+        "Vrai",
+        "Faux"
+      ],
+      "correctAnswer": 1,
+      "id": 1752704526918,
+      "createdBy": "bocquet.pierre@gmail.com",
+      "createdAt": "2025-07-16T22:22:06.918Z"
+    },
+    {
+      "id": 1,
+      "text": "Quelle est la capitale de la France ?",
+      "type": "multiple_choice",
+      "options": [
+        "Londres",
+        "Berlin",
+        "Paris",
+        "Madrid"
+      ],
+      "correctAnswer": 2,
+      "order": 2,
+      "createdBy": "system",
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": 2,
+      "text": "Combien font 2 + 2 ?",
+      "type": "multiple_choice",
+      "options": [
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "correctAnswer": 1,
+      "order": 3,
+      "createdBy": "system",
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": 3,
+      "text": "Quel est le plus grand océan du monde ?",
+      "type": "multiple_choice",
+      "options": [
+        "Atlantique",
+        "Pacifique",
+        "Indien",
+        "Arctique"
+      ],
+      "correctAnswer": 1,
+      "order": 4,
+      "createdBy": "system",
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "text": "couleur cheval blanc",
+      "type": "free_text",
+      "correctAnswers": [
+        "blanc",
+        "il est blanc",
+        "le cheval est blanc"
+      ],
+      "threshold": 0.8,
+      "id": 1752704918334,
+      "order": 1,
+      "createdBy": "bocquet.pierre@gmail.com",
+      "createdAt": "2025-07-16T22:28:38.334Z"
+    }
+  ],
+  "lastUpdated": "2025-07-16T22:30:43.675Z"
+}

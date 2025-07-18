@@ -1,0 +1,313 @@
+{
+  "users": {
+    "admin@exemple.com": {
+      "email": "admin@exemple.com",
+      "firstLogin": "2025-07-16T16:23:52.823Z",
+      "lastLogin": "2025-07-16T16:26:29.861Z",
+      "loginCount": 2,
+      "isAdmin": true
+    },
+    "bocquet.pierre@gmail.com": {
+      "email": "bocquet.pierre@gmail.com",
+      "firstLogin": "2025-07-16T16:27:13.561Z",
+      "lastLogin": "2025-07-16T21:51:01.229Z",
+      "loginCount": 12,
+      "isAdmin": true
+    },
+    "test@est.com": {
+      "email": "test@est.com",
+      "firstLogin": "2025-07-16T16:35:59.525Z",
+      "lastLogin": "2025-07-16T16:35:59.525Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "toto@toto.com": {
+      "email": "toto@toto.com",
+      "firstLogin": "2025-07-16T16:36:16.036Z",
+      "lastLogin": "2025-07-16T21:35:48.676Z",
+      "loginCount": 4,
+      "isAdmin": false
+    },
+    "toto@gmail.com": {
+      "email": "toto@gmail.com",
+      "firstLogin": "2025-07-16T21:09:18.854Z",
+      "lastLogin": "2025-07-16T21:09:18.854Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "toot@gmai.col": {
+      "email": "toot@gmai.col",
+      "firstLogin": "2025-07-16T21:24:17.654Z",
+      "lastLogin": "2025-07-16T21:24:17.654Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "test@test.com": {
+      "email": "test@test.com",
+      "firstLogin": "2025-07-16T21:24:24.750Z",
+      "lastLogin": "2025-07-16T21:24:24.750Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "popo@popo.com": {
+      "email": "popo@popo.com",
+      "firstLogin": "2025-07-16T21:24:35.636Z",
+      "lastLogin": "2025-07-16T21:24:35.636Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "ff@ff.com": {
+      "email": "ff@ff.com",
+      "firstLogin": "2025-07-16T21:24:59.296Z",
+      "lastLogin": "2025-07-16T21:24:59.296Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "mm@mm.com": {
+      "email": "mm@mm.com",
+      "firstLogin": "2025-07-16T21:25:20.485Z",
+      "lastLogin": "2025-07-16T21:25:20.485Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "gg@gg.com": {
+      "email": "gg@gg.com",
+      "firstLogin": "2025-07-16T21:29:56.729Z",
+      "lastLogin": "2025-07-16T21:29:56.729Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "pipi@pipi.com": {
+      "email": "pipi@pipi.com",
+      "firstLogin": "2025-07-16T21:30:10.534Z",
+      "lastLogin": "2025-07-16T21:30:10.534Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "e@p.com": {
+      "email": "e@p.com",
+      "firstLogin": "2025-07-16T21:35:42.868Z",
+      "lastLogin": "2025-07-16T21:35:42.868Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "f@f.com": {
+      "email": "f@f.com",
+      "firstLogin": "2025-07-16T21:35:54.413Z",
+      "lastLogin": "2025-07-16T21:35:54.413Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "j@j.com": {
+      "email": "j@j.com",
+      "firstLogin": "2025-07-16T21:35:59.284Z",
+      "lastLogin": "2025-07-16T21:53:25.964Z",
+      "loginCount": 4,
+      "isAdmin": false
+    },
+    "t@t.com": {
+      "email": "t@t.com",
+      "firstLogin": "2025-07-16T21:51:15.470Z",
+      "lastLogin": "2025-07-16T21:51:15.470Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "s@s.com": {
+      "email": "s@s.com",
+      "firstLogin": "2025-07-16T21:51:27.038Z",
+      "lastLogin": "2025-07-16T21:51:27.038Z",
+      "loginCount": 1,
+      "isAdmin": false
+    },
+    "m@m.com": {
+      "email": "m@m.com",
+      "firstLogin": "2025-07-16T21:51:36.972Z",
+      "lastLogin": "2025-07-16T21:51:36.972Z",
+      "loginCount": 1,
+      "isAdmin": false
+    }
+  },
+  "sessions": {
+    "dmcd279imqr3eoh7k9bnnm": {
+      "email": "admin@exemple.com",
+      "isAdmin": true,
+      "createdAt": "2025-07-16T16:23:52.823Z",
+      "lastActivity": "2025-07-16T16:23:52.823Z"
+    },
+    "15vv24c5uqaclqjaenc08s": {
+      "email": "bocquet.pierre@gmail.com",
+      "isAdmin": true,
+      "createdAt": "2025-07-16T16:35:39.265Z",
+      "lastActivity": "2025-07-16T16:35:39.265Z"
+    },
+    "9ydjv7slogwjoe0l75mhh": {
+      "email": "test@est.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T16:35:59.525Z",
+      "lastActivity": "2025-07-16T16:35:59.525Z"
+    },
+    "xxcpxmj4uvpy0mi6ew28as": {
+      "email": "toto@toto.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T16:36:16.036Z",
+      "lastActivity": "2025-07-16T16:36:16.036Z"
+    },
+    "aau8qfd7eoeo5jz8ow2j9": {
+      "email": "bocquet.pierre@gmail.com",
+      "isAdmin": true,
+      "createdAt": "2025-07-16T16:38:16.174Z",
+      "lastActivity": "2025-07-16T16:38:16.174Z"
+    },
+    "sldsb717te8e4rnvv33o7": {
+      "email": "bocquet.pierre@gmail.com",
+      "isAdmin": true,
+      "createdAt": "2025-07-16T16:38:26.919Z",
+      "lastActivity": "2025-07-16T16:38:26.919Z"
+    },
+    "vrx9jy0c2t01dly23d89ai": {
+      "email": "bocquet.pierre@gmail.com",
+      "isAdmin": true,
+      "createdAt": "2025-07-16T20:58:44.751Z",
+      "lastActivity": "2025-07-16T20:58:44.751Z"
+    },
+    "tbft05cgv1oylkl1bm7xl": {
+      "email": "toto@toto.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T20:58:52.577Z",
+      "lastActivity": "2025-07-16T20:58:52.577Z"
+    },
+    "76quoikb3nfte1pn4pyrw": {
+      "email": "bocquet.pierre@gmail.com",
+      "isAdmin": true,
+      "createdAt": "2025-07-16T21:05:55.534Z",
+      "lastActivity": "2025-07-16T21:05:55.534Z"
+    },
+    "4mcah9mifv8s8kt0qudhe": {
+      "email": "toto@gmail.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:09:18.854Z",
+      "lastActivity": "2025-07-16T21:09:18.854Z"
+    },
+    "p20mzo9f8exbp1imt4pkq": {
+      "email": "bocquet.pierre@gmail.com",
+      "isAdmin": true,
+      "createdAt": "2025-07-16T21:16:23.289Z",
+      "lastActivity": "2025-07-16T21:16:23.289Z"
+    },
+    "rv3etuud5bbtc4bsm7fea": {
+      "email": "bocquet.pierre@gmail.com",
+      "isAdmin": true,
+      "createdAt": "2025-07-16T21:23:55.998Z",
+      "lastActivity": "2025-07-16T21:23:55.998Z"
+    },
+    "yax1w6pg1ekvnvoqw908ob": {
+      "email": "toot@gmai.col",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:24:17.654Z",
+      "lastActivity": "2025-07-16T21:24:17.654Z"
+    },
+    "lw760txwwbjdnlzfdvkd": {
+      "email": "popo@popo.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:24:35.636Z",
+      "lastActivity": "2025-07-16T21:24:35.636Z"
+    },
+    "thjtuo43k6qgtuef0yo2rr": {
+      "email": "ff@ff.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:24:59.296Z",
+      "lastActivity": "2025-07-16T21:24:59.296Z"
+    },
+    "x7cp4zy1rq8brby5hugsmc": {
+      "email": "mm@mm.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:25:20.485Z",
+      "lastActivity": "2025-07-16T21:25:20.485Z"
+    },
+    "q07zwp69ganfr42ab86ukg": {
+      "email": "gg@gg.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:29:56.729Z",
+      "lastActivity": "2025-07-16T21:29:56.729Z"
+    },
+    "ybe8nrurqihm6qlyjyrkv": {
+      "email": "pipi@pipi.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:30:10.534Z",
+      "lastActivity": "2025-07-16T21:30:10.534Z"
+    },
+    "n1zw6rycl9pz149lgv8gb": {
+      "email": "bocquet.pierre@gmail.com",
+      "isAdmin": true,
+      "createdAt": "2025-07-16T21:35:30.265Z",
+      "lastActivity": "2025-07-16T21:35:30.265Z"
+    },
+    "tql59ioqalhfxve2d584fq": {
+      "email": "e@p.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:35:42.868Z",
+      "lastActivity": "2025-07-16T21:35:42.868Z"
+    },
+    "0blfvhvwfrew4xmcan2si7": {
+      "email": "toto@toto.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:35:48.676Z",
+      "lastActivity": "2025-07-16T21:35:48.676Z"
+    },
+    "sk0q9p8kn4jzhiz2hwku9": {
+      "email": "f@f.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:35:54.413Z",
+      "lastActivity": "2025-07-16T21:35:54.413Z"
+    },
+    "mh013z4d4vdqtwe8tuycf": {
+      "email": "j@j.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:35:59.284Z",
+      "lastActivity": "2025-07-16T21:35:59.284Z"
+    },
+    "ag1930f7tllgh1pij1h3ow": {
+      "email": "j@j.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:47:40.950Z",
+      "lastActivity": "2025-07-16T21:47:40.950Z"
+    },
+    "nsznsz0ky4a52irl9euu59": {
+      "email": "bocquet.pierre@gmail.com",
+      "isAdmin": true,
+      "createdAt": "2025-07-16T21:51:01.229Z",
+      "lastActivity": "2025-07-16T21:51:01.229Z"
+    },
+    "3okl3olijiu008adv3k29q0a": {
+      "email": "j@j.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:51:06.733Z",
+      "lastActivity": "2025-07-16T21:51:06.733Z"
+    },
+    "4gpaphohhv3hqtes8yhnj": {
+      "email": "t@t.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:51:15.470Z",
+      "lastActivity": "2025-07-16T21:51:15.470Z"
+    },
+    "dht1zjh7dzez63jz4iip": {
+      "email": "s@s.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:51:27.038Z",
+      "lastActivity": "2025-07-16T21:51:27.038Z"
+    },
+    "ye76gnpr0ge1qp8rlgti6t": {
+      "email": "m@m.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:51:36.972Z",
+      "lastActivity": "2025-07-16T21:51:36.972Z"
+    },
+    "v68gfjm9o0bhrhri3siii6": {
+      "email": "j@j.com",
+      "isAdmin": false,
+      "createdAt": "2025-07-16T21:53:25.965Z",
+      "lastActivity": "2025-07-16T21:53:25.965Z"
+    }
+  },
+  "lastUpdated": "2025-07-16T21:53:25.965Z"
+}

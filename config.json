@@ -1,0 +1,15 @@
+{
+  "admins": [
+    "bocquet.pierre@gmail.com",
+    "admin@exemple.com"
+  ],
+  "quiz": {
+    "questionTimer": 30,
+    "maxParticipants": 100,
+    "allowAnonymous": false
+  },
+  "security": {
+    "requireEmailVerification": false,
+    "allowSelfRegistration": true
+  }
+} 

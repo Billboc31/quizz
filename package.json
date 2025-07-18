@@ -1,0 +1,25 @@
+{
+  "name": "quiz-interactif",
+  "version": "1.0.0",
+  "description": "Application de quiz interactive pour mariages et team building",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "dev:network": "HOST=0.0.0.0 node server.js",
+    "setup": "mkdir -p data"
+  },
+  "keywords": [
+    "quiz",
+    "wedding",
+    "team-building",
+    "interactive"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.52.0",
+    "express": "^4.18.2",
+    "ws": "^8.13.0"
+  }
+}

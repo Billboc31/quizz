@@ -307,11 +307,10 @@ async function initializeSupabase() {
                     }
                 });
             
-            // Timeout de sécurité pour activer le fallback si Realtime ne fonctionne pas
+            // Timeout de sécurité pour le debug
             setTimeout(() => {
                 if (!messagesChannel || messagesChannel.state !== 'joined') {
-                    console.warn('⚠️ Realtime non disponible, activation du fallback');
-                    startPollingFallback();
+                    console.warn('⚠️ Realtime non disponible, utilisation du mode local');
                 }
             }, 5000);
             
@@ -520,63 +519,33 @@ async function broadcastMessage(message) {
     try {
         console.log('📤 Envoi message:', message.type, 'Canal state:', messagesChannel?.state);
         
-        if (supabase) {
-            const payload = {
-                ...message,
-                timestamp: new Date().toISOString()
-            };
-            
-            // Priorité à Realtime si disponible
-            if (messagesChannel && messagesChannel.state === 'joined') {
-                try {
-                    const response = await messagesChannel.send({
-                        type: 'broadcast',
-                        event: 'game-message',
-                        payload: payload
-                    });
-                    
-                    console.log('📤 Réponse Realtime:', response);
-                    
-                    if (response === 'ok') {
-                        console.log('✅ Message Realtime envoyé:', message.type);
-                        return; // Succès Realtime, pas besoin de fallback
-                    }
-                } catch (realtimeError) {
-                    console.error('❌ Erreur Realtime:', realtimeError);
-                }
-            }
-            
-            // Fallback : sauvegarder dans la table
-            console.log('📤 Utilisation du fallback pour:', message.type);
+        if (supabase && messagesChannel && messagesChannel.state === 'joined') {
+            // Utiliser SEULEMENT Realtime Broadcast (pas de sauvegarde DB)
             try {
-                // Structure stricte pour la table messages : seulement type, email, data, timestamp
-                const dbPayload = {
-                    type: payload.type || 'unknown',
-                    email: payload.email || null,
-                    data: JSON.stringify(payload), // Tout le payload va dans data
-                    timestamp: payload.timestamp || new Date().toISOString()
-                };
+                const response = await messagesChannel.send({
+                    type: 'broadcast',
+                    event: 'game-message',
+                    payload: {
+                        ...message,
+                        timestamp: new Date().toISOString()
+                    }
+                });
                 
-                console.log('📤 Payload DB à insérer:', dbPayload);
+                console.log('📤 Réponse Realtime:', response);
                 
-                const { error } = await supabase
-                    .from('messages')
-                    .insert([dbPayload]);
-                
-                if (error) {
-                    console.error('❌ Erreur sauvegarde message:', error);
-                    console.error('❌ Détails erreur:', error);
-                } else {
-                    console.log('✅ Message sauvegardé (fallback):', message.type);
+                if (response === 'ok') {
+                    console.log('✅ Message Realtime envoyé:', message.type);
+                    return; // Succès Realtime
                 }
-            } catch (dbError) {
-                console.error('❌ Erreur base de données:', dbError);
+            } catch (realtimeError) {
+                console.error('❌ Erreur Realtime:', realtimeError);
             }
-        } else {
-            // Mode local
-            console.log('📤 Mode local:', message.type);
-            handleGameMessage(message);
         }
+        
+        // Fallback : mode local
+        console.log('📤 Mode local/fallback:', message.type);
+        handleGameMessage(message);
+        
     } catch (error) {
         console.error('❌ Erreur lors de l\'envoi du message:', error);
     }

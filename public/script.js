@@ -600,8 +600,7 @@ async function handleLogin(e) {
         // Notifier les autres participants
         await broadcastMessage({
             type: 'participant-joined',
-            email: email,
-            isAdmin: isAdmin
+            email: email
         });
         
         console.log(`✅ Connexion réussie - ${isAdmin ? 'Administrateur' : 'Utilisateur'}: ${email}`);

@@ -375,9 +375,9 @@ async function broadcastMessage(message) {
                 console.log('📤 Message envoyé:', message.type);
             }
         } else {
-            // Mode local - utiliser les WebSockets originaux
+            // Mode local - simuler le message
             console.log('📤 Message local:', message.type);
-            handleSupabaseMessage(message);
+            handleGameMessage(message);
         }
     } catch (error) {
         console.error('❌ Erreur lors de l\'envoi du message:', error);

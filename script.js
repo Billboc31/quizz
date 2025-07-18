@@ -549,19 +549,11 @@ async function broadcastMessage(message) {
             // Fallback : sauvegarder dans la table
             console.log('📤 Utilisation du fallback pour:', message.type);
             try {
-                // Nettoyer le payload pour la table messages - structure stricte
+                // Structure stricte pour la table messages : seulement type, email, data, timestamp
                 const dbPayload = {
                     type: payload.type || 'unknown',
                     email: payload.email || null,
-                    data: JSON.stringify({
-                        type: payload.type,
-                        email: payload.email,
-                        timestamp: payload.timestamp,
-                        // Inclure seulement les champs nécessaires
-                        ...(payload.question && { question: payload.question }),
-                        ...(payload.questionIndex !== undefined && { questionIndex: payload.questionIndex }),
-                        ...(payload.scores && { scores: payload.scores })
-                    }),
+                    data: JSON.stringify(payload), // Tout le payload va dans data
                     timestamp: payload.timestamp || new Date().toISOString()
                 };
                 
@@ -573,7 +565,7 @@ async function broadcastMessage(message) {
                 
                 if (error) {
                     console.error('❌ Erreur sauvegarde message:', error);
-                    console.error('❌ Détails erreur:', error.details);
+                    console.error('❌ Détails erreur:', error);
                 } else {
                     console.log('✅ Message sauvegardé (fallback):', message.type);
                 }

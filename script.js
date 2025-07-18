@@ -380,7 +380,15 @@ function startPollingFallback() {
                     if (message.id > lastMessageId) {
                         lastMessageId = message.id;
                         console.log('📨 Message polling reçu:', message.type);
-                        handleRealtimeMessage(message);
+                        // Parser les données JSON
+                        try {
+                            const parsedData = JSON.parse(message.data);
+                            handleRealtimeMessage(parsedData);
+                        } catch (parseError) {
+                            console.error('❌ Erreur parsing message:', parseError);
+                            // Fallback avec les données directes
+                            handleRealtimeMessage(message);
+                        }
                     }
                 });
             }
@@ -529,9 +537,17 @@ async function broadcastMessage(message) {
             // Fallback : sauvegarder dans la table
             console.log('📤 Utilisation du fallback pour:', message.type);
             try {
+                // Nettoyer le payload pour la table messages
+                const dbPayload = {
+                    type: payload.type,
+                    email: payload.email,
+                    data: JSON.stringify(payload),
+                    timestamp: payload.timestamp
+                };
+                
                 const { error } = await supabase
                     .from('messages')
-                    .insert([payload]);
+                    .insert([dbPayload]);
                 
                 if (error) {
                     console.error('❌ Erreur sauvegarde message:', error);
@@ -569,15 +585,23 @@ async function saveUser(userData) {
 }
 
 async function saveSessionData(sessionData) {
-    if (!supabase) return;
+    if (!supabase || !sessionData) return;
     
     try {
+        // Vérifier que les données sont valides
+        if (!sessionData.id || !sessionData.email) {
+            console.error('❌ Données de session invalides:', sessionData);
+            return;
+        }
+        
         const { error } = await supabase
             .from('sessions')
             .upsert([sessionData], { onConflict: 'id' });
         
         if (error) {
             console.error('❌ Erreur lors de la sauvegarde session:', error);
+        } else {
+            console.log('✅ Session sauvegardée:', sessionData.id);
         }
     } catch (error) {
         console.error('❌ Erreur lors de la sauvegarde session:', error);
@@ -785,8 +809,7 @@ async function handleLogin(e) {
         // Notifier les autres participants
         await broadcastMessage({
             type: 'participant-joined',
-            email: email,
-            isAdmin: isAdmin
+            email: email
         });
         
         console.log(`✅ Connexion réussie - ${isAdmin ? 'Administrateur' : 'Utilisateur'}: ${email}`);

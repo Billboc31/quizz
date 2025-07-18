@@ -320,6 +320,18 @@ async function initializeSupabase() {
             startPollingFallback();
         }
         
+        // Nettoyer les anciens messages au démarrage
+        try {
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+            await supabase
+                .from('messages')
+                .delete()
+                .lt('timestamp', fiveMinutesAgo);
+            console.log('🧹 Anciens messages nettoyés au démarrage');
+        } catch (cleanupError) {
+            console.log('⚠️ Nettoyage des messages ignoré:', cleanupError.message);
+        }
+        
         console.log('✅ Supabase initialisé');
         return true;
     } catch (error) {
@@ -537,13 +549,23 @@ async function broadcastMessage(message) {
             // Fallback : sauvegarder dans la table
             console.log('📤 Utilisation du fallback pour:', message.type);
             try {
-                // Nettoyer le payload pour la table messages
+                // Nettoyer le payload pour la table messages - structure stricte
                 const dbPayload = {
-                    type: payload.type,
-                    email: payload.email,
-                    data: JSON.stringify(payload),
-                    timestamp: payload.timestamp
+                    type: payload.type || 'unknown',
+                    email: payload.email || null,
+                    data: JSON.stringify({
+                        type: payload.type,
+                        email: payload.email,
+                        timestamp: payload.timestamp,
+                        // Inclure seulement les champs nécessaires
+                        ...(payload.question && { question: payload.question }),
+                        ...(payload.questionIndex !== undefined && { questionIndex: payload.questionIndex }),
+                        ...(payload.scores && { scores: payload.scores })
+                    }),
+                    timestamp: payload.timestamp || new Date().toISOString()
                 };
+                
+                console.log('📤 Payload DB à insérer:', dbPayload);
                 
                 const { error } = await supabase
                     .from('messages')
@@ -551,6 +573,7 @@ async function broadcastMessage(message) {
                 
                 if (error) {
                     console.error('❌ Erreur sauvegarde message:', error);
+                    console.error('❌ Détails erreur:', error.details);
                 } else {
                     console.log('✅ Message sauvegardé (fallback):', message.type);
                 }
@@ -803,7 +826,7 @@ async function handleLogin(e) {
         
         updateUI();
         
-        // Sauvegarder la session
+        // Sauvegarder la session locale
         saveSession();
         
         // Notifier les autres participants
